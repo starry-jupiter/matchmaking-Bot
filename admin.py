@@ -1,13 +1,37 @@
+import threading
 import os
-from flask import Blueprint, render_template_string, request, redirect, url_for, session
-import requests
-import database
+from flask import Flask
+from admin import admin_bp  # This matches the name in your admin.py!
+from app import bot         # This imports your Discord bot instance
 from dotenv import load_dotenv
 
 load_dotenv()
 
-admin_bp = Blueprint('admin', __name__)
-DISCORD_API_BASE = "https://discord.com/api/v10"
+# 1. Create the actual Flask Application
+app = Flask(__name__)
+
+# 2. Register your Admin Dashboard instructions
+app.register_blueprint(admin_bp)
+
+# 3. Add a health check so Render knows the site is working
+@app.route('/health')
+def health():
+    return "Matchmaker Dashboard is Online!", 200
+
+def run_flask():
+    # Render uses port 10000 by default
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
+
+if __name__ == "__main__":
+    # Start the Dashboard in the background
+    t = threading.Thread(target=run_flask)
+    t.daemon = True
+    t.start()
+
+    # Start the Discord Bot in the foreground
+    # (Make sure 'bot' is the name of your bot object in app.py)
+    bot.run(os.getenv('DISCORD_TOKEN'))
 
 HTML_ADMIN_PANEL = """
 <!DOCTYPE html>
