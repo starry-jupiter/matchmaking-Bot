@@ -19,7 +19,7 @@ app.register_blueprint(admin_bp)
 # --- DISCORD OAUTH2 SETTINGS ---
 DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
 DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
-REDIRECT_URI = "http://127.0.0.1:5000/callback"
+REDIRECT_URI = "https://matchmaking-bot-ojbx.onrender.com/callback"
 OAUTH_URL = f"https://discord.com/api/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20guilds"
 DISCORD_API_BASE = "https://discord.com/api/v10"
 
