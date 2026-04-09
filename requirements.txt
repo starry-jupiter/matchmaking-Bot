@@ -1,0 +1,6 @@
+discord.py
+flask
+supabase
+python-dotenv
+requests
+groq
