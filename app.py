@@ -416,7 +416,9 @@ async def spawn_panel(interaction: discord.Interaction):
 async def help_cmd(interaction: discord.Interaction):
     await interaction.response.send_message("Help Menu sent!", ephemeral=True)
 
-if __name__ == "__main__":
-# Bottom of app.py
+# 1. Create the bot instance GLOBALLY so main.py can see it
 bot = MatchmakingBot()
-# (Do NOT put bot.run() here!)
+
+# 2. This block is now just a safety check
+if __name__ == "__main__":
+    print("⚠️ You are running app.py directly. Use 'python main.py' instead to start the bot AND dashboard.")
