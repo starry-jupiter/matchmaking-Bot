@@ -417,4 +417,6 @@ async def help_cmd(interaction: discord.Interaction):
     await interaction.response.send_message("Help Menu sent!", ephemeral=True)
 
 if __name__ == "__main__":
-    bot.run(os.getenv('DISCORD_TOKEN'))
+# Bottom of app.py
+bot = MatchmakingBot()
+# (Do NOT put bot.run() here!)
