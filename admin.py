@@ -1,17 +1,17 @@
-import threading
 import os
-from flask import Flask
-from admin import admin_bp  # This matches the name in your admin.py!
-from app import bot         # This imports your Discord bot instance
+import requests
+from flask import Blueprint, render_template_string, redirect, request, session, url_for
 from dotenv import load_dotenv
+import database
 
 load_dotenv()
 
-# 1. Create the actual Flask Application
-app = Flask(__name__)
+# 1. Define the actual Blueprint!
+admin_bp = Blueprint('admin', __name__)
 
-# 2. Register your Admin Dashboard instructions
-app.register_blueprint(admin_bp)
+DISCORD_API_BASE = "https://discord.com/api/v10"
+
+# (Keep your HTML_ADMIN_PANEL and the @admin_bp.route code exactly as it is below this)
 
 # 3. Add a health check so Render knows the site is working
 @app.route('/health')

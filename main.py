@@ -1,27 +1,20 @@
 import threading
 import os
-from flask import Flask
-from dashboard import admin_bp  # Matches your new filename dashboard.py
-from app import bot             # Matches your bot instance in app.py
+from dashboard import app as flask_app  # <--- FIX: Import the configured app
+from app import bot                     # Import the bot
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# 1. Initialize the Flask App
-app = Flask(__name__)
-
-# 2. Register the Blueprint from dashboard.py
-app.register_blueprint(admin_bp)
-
-# 3. Health check for Render/UptimeRobot
-@app.route('/health')
+# Health check for Render
+@flask_app.route('/health')
 def health():
     return "Bot and Dashboard are Alive!", 200
 
 def run_flask():
-    # Render uses the PORT environment variable (default 10000)
+    # Render uses port 10000 by default
     port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    flask_app.run(host='0.0.0.0', port=port)
 
 if __name__ == "__main__":
     # Start Flask in the background
@@ -30,5 +23,4 @@ if __name__ == "__main__":
     t.start()
 
     # Start the Discord Bot in the foreground
-    # This keeps the script running
     bot.run(os.getenv('DISCORD_TOKEN'))

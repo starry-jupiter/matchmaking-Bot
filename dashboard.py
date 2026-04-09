@@ -4,7 +4,7 @@ from flask import Flask, render_template_string, redirect, request, session, url
 from dotenv import load_dotenv
 
 import database
-from dashboard import admin_bp  # Imports your custom admin panel
+from admin import admin_bp  # <--- FIX: Import from admin, not dashboard!
 
 load_dotenv()
 
@@ -13,6 +13,8 @@ app.secret_key = os.getenv("FLASK_SECRET_KEY", "super-secret-key-change-me")
 
 # Register the admin panel so Flask knows it exists
 app.register_blueprint(admin_bp)
+
+# ... (keep all your OAuth and routes exactly the same) ...
 
 # --- DISCORD OAUTH2 SETTINGS ---
 DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
