@@ -4,7 +4,7 @@ from flask import Flask, render_template_string, redirect, request, session, url
 from dotenv import load_dotenv
 
 import database
-from admin import admin_bp  # Imports your custom admin panel
+from dashboard import admin_bp  # Imports your custom admin panel
 
 load_dotenv()
 
