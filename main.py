@@ -4,28 +4,27 @@ import os
 import time
 import requests
 from flask import Flask, render_template_string, redirect, request, session, url_for
-from logout import logout_bp # If you have a separate logout file
 from admin import admin_bp
 from app import bot
 import database
 
-# 1. Initialize the Master Brain
+# 1. Initialize Environment
 from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "madison-secure-key-2026")
+# Using your tech-chic signature for the secret key! 
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "madison-vennie-tech-chic-2026")
 app.register_blueprint(admin_bp)
 
-# --- DISCORD SETTINGS (Make sure these are in your Render Env Variables!) ---
+# --- DISCORD SETTINGS ---
 CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
 CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
-REDIRECT_URI = os.getenv("REDIRECT_URI") # Should end in /callback
-OAUTH_URL = os.getenv("OAUTH_URL") # The long Discord link
+REDIRECT_URI = os.getenv("REDIRECT_URI")
+OAUTH_URL = os.getenv("OAUTH_URL")
 API_BASE = "https://discord.com/api/v10"
 
-# --- IMPORT HTML FROM YOUR OTHER FILE ---
-# This keeps main.py clean while keeping your designs in dashboard.py
+# --- IMPORT UI FROM DASHBOARD ---
 from dashboard import HTML_LANDING, HTML_DASHBOARD, HTML_TOS, HTML_PRIVACY
 
 # ==========================================
@@ -72,10 +71,20 @@ def dashboard():
         session.clear()
         return redirect(url_for('home'))
 
-    # Filter for servers where you have Admin permissions
-    admin_servers = [g for g in guilds_req.json() if (int(g['permissions']) & 0x8) == 0x8]
+    # Filter for servers where you have Admin permissions (Permission 0x8)
+    try:
+        all_guilds = guilds_req.json()
+        admin_servers = [g for g in all_guilds if (int(g.get('permissions', 0)) & 0x8) == 0x8]
+    except Exception as e:
+        print(f"Error parsing guilds: {e}")
+        admin_servers = []
     
     return render_template_string(HTML_DASHBOARD, user=user_req.json(), servers=admin_servers)
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('home'))
 
 @app.route('/health')
 def health():
@@ -87,19 +96,25 @@ def health():
 
 def run_bot():
     token = os.getenv('DISCORD_TOKEN')
-    time.sleep(15) # Wait for Render Network
+    print("⏳ Bot thread waiting for network...", flush=True)
+    time.sleep(15) 
+    
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
+        print("🟢 Bot is attempting to log in...", flush=True)
         bot.run(token)
     except Exception as e:
-        print(f"🔴 Bot Error: {e}")
+        print(f"🔴 Bot Error: {e}", flush=True)
         os._exit(1)
 
 if __name__ == "__main__":
-    # Start Bot
+    print("🟢 Master script starting!", flush=True)
+    
+    # Start Bot in background
     threading.Thread(target=run_bot, daemon=True).start()
     
-    # Start Web Server
+    # Start Web Server in main thread
     port = int(os.environ.get("PORT", 10000))
+    print(f"🟢 Flask starting on port {port}...", flush=True)
     app.run(host='0.0.0.0', port=port)
