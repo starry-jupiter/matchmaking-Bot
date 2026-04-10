@@ -418,13 +418,68 @@ async def help_cmd(interaction: discord.Interaction):
     
     embed.add_field(name="🛠️ Admin Commands", value="`/setup` - Configure all channels and roles.\n`/spawn-community-panel` - Drop the support ticket and staff app buttons in a channel.", inline=False)
     
-    embed.add_field(name="💖 Player Commands", value="`/open-ticket` - Start your swiping journey.\n`/my-profile` - View and edit your dating intro.\n`/time-left` - Check how much time is left with your match.", inline=False)
+    # Added /request-unpair to the Player Commands list below
+    embed.add_field(name="💖 Player Commands", value="`/open-ticket` - Start your swiping journey.\n`/my-profile` - View and edit your dating intro.\n`/time-left` - Check how much time is left with your match.\n`/request-unpair` - Open a ticket to unpair from your match.", inline=False)
     
     embed.add_field(name="🛡️ Staff Commands", value="`/pair` - Manually pair two users.\n`/unpair` - Manually break a pairing.\n`/watchlist-add` & `/watchlist` - Keep track of suspicious users.", inline=False)
 
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
+import discord
+from discord import app_commands
+import time # Needed for the timestamp
 
+@bot.tree.command(name="request-unpair", description="Open a ticket to request unpairing from your match.")
+async def request_unpair_ticket_cmd(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    
+    # 1. Fetch pair info from your database
+    pair_info = database.get_user_pairing(interaction.user.id, interaction.guild.id)
+    
+    if not pair_info:
+        return await interaction.followup.send("❌ You don't have an active match to unpair from!", ephemeral=True)
+        
+    # --- DB ASSUMPTION SETUP ---
+    # Assuming your database returns a dictionary or object with the partner's ID and the time they matched.
+    # Adjust these keys based on how your database actually returns the data!
+    partner_id = pair_info['partner_id'] 
+    paired_timestamp = pair_info['paired_timestamp'] # Should be a Unix timestamp (e.g., 1712780000)
+    
+    # 2. Set up permissions for the new ticket channel (Private to the user and the bot)
+    overwrites = {
+        interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+        interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+        interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+    }
+    
+    # Optional: If you have a specific category for tickets, fetch it here
+    # category = discord.utils.get(interaction.guild.categories, name="Tickets")
+    
+    # 3. Create the text channel
+    ticket_channel = await interaction.guild.create_text_channel(
+        name=f"unpair-{interaction.user.name}",
+        overwrites=overwrites,
+        # category=category # Uncomment if you are using a category
+    )
+    
+    # 4. Create the Informational Embed
+    embed = discord.Embed(
+        title="💔 Unpair Request Ticket",
+        description="Hi! Please leave a brief message explaining why you want to unpair. A staff member will review your request and respond here as soon as possible.",
+        color=discord.Color.dark_theme()
+    )
+    
+    embed.add_field(name="User Requesting", value=interaction.user.mention, inline=True)
+    embed.add_field(name="Current Partner", value=f"<@{partner_id}>", inline=True)
+    
+    # <t:timestamp:R> tells Discord to format it dynamically (e.g., "5 days ago")
+    embed.add_field(name="Paired For", value=f"<t:{int(paired_timestamp)}:R>", inline=False)
+    
+    # 5. Send the embed into the newly created ticket channel
+    await ticket_channel.send(content=f"Welcome {interaction.user.mention}, staff will review your request shortly.", embed=embed)
+    
+    # 6. Tell the user where to go
+    await interaction.followup.send(f"✅ Your unpair request ticket has been created! Please go to {ticket_channel.mention}", ephemeral=True)
 # 2. This block is now just a safety check
 if __name__ == "__main__":
     print("⚠️ You are running app.py directly. Use 'python main.py' instead to start the bot AND dashboard.")
