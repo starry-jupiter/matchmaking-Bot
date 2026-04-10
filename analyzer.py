@@ -25,11 +25,15 @@ def analyze_intro(user_intro):
     - Apply this logic to all hobbies. Capitalize the first letter of each word.
 
     🚨 CRITICAL TOXICITY & SAFETY CHECK 🚨
-    You are also a strict safety moderator. Analyze the text for:
+    You are a safety moderator. Analyze the text for:
     - NSFW, sexual, or creepy content.
-    - Attempts to bypass age restrictions (e.g., "I'm l4", "minor but mature").
     - Extreme toxicity, slurs, or harassment.
-    If ANY of this is found, set "is_toxic" to true and provide a short "toxic_reason". Otherwise, set "is_toxic" to false.
+    
+    NOTE: Users aged 13-17 ARE allowed and are not "bypassing restrictions" 
+    simply by stating their age. Only flag as toxic if they are being 
+    inappropriate, sexual, or explicitly trying to hide their age.
+    
+    If any violation is found, set "is_toxic" to true. Otherwise, false.
 
     Return ONLY a JSON object exactly like this:
     {{
