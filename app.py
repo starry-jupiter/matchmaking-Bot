@@ -2,10 +2,9 @@ import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 import os
-import time  # <--- Add this line right here!
 import asyncio
 from dotenv import load_dotenv
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 import database
 import analyzer
@@ -396,56 +395,33 @@ async def vouch_user(interaction: discord.Interaction, match: discord.User):
     database.add_vouch(match.id, interaction.guild.id)
     await interaction.response.send_message("✅ Vouched!")
 
-# ==========================================
-# CAFE BUTTONS VIEW
-# ==========================================
-class CafeActionView(discord.ui.View):
-    def __init__(self, user1_id, user2_id):
-        super().__init__(timeout=None)
-        self.user1_id = user1_id
-        self.user2_id = user2_id
-
-    @discord.ui.button(label='❤️ Keep Cafe Open', style=discord.ButtonStyle.success, custom_id='cafe_keep_btn')
-    async def keep_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id not in [self.user1_id, self.user2_id]:
-            return await interaction.response.send_message("Only the matched users can vote!", ephemeral=True)
-        await interaction.response.send_message(f"✅ {interaction.user.mention} voted to keep the cafe open!")
-
-    @discord.ui.button(label='💔 End Match & Close', style=discord.ButtonStyle.danger, custom_id='cafe_close_btn')
-    async def close_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id not in [self.user1_id, self.user2_id]:
-            return await interaction.response.send_message("Only the matched users can vote!", ephemeral=True)
-            
-        await interaction.response.send_message(f"🔒 {interaction.user.mention} decided to end the match. This cafe will close shortly.")
-        database.end_pairing(self.user1_id, self.user2_id, interaction.guild.id)
-        
-        await asyncio.sleep(10)
-        await interaction.channel.delete()
-
-# ==========================================
-# PAIR & UNPAIR COMMANDS
-# ==========================================
 @bot.tree.command(name="pair", description="Cupid: Manually pair two users")
 @app_commands.default_permissions(manage_messages=True)
 async def manual_pair(interaction: discord.Interaction, user1: discord.Member, user2: discord.Member):
+    # Defer the response because creating channels takes a few seconds
     await interaction.response.defer(ephemeral=True)
     
+    # 1. Update the database
     database.create_pairing(user1.id, user2.id, interaction.guild.id)
-    config = database.get_config(interaction.guild.id)
     
+    # 2. Fetch the server configuration
+    config = database.get_config(interaction.guild.id)
     if not config:
         return await interaction.followup.send("❌ Server not configured. Please run /setup first.")
         
+    # 3. Send the public announcement
     pairs_channel_id = config.get("pairs_channel_id")
     if pairs_channel_id:
         pairs_channel = interaction.guild.get_channel(int(pairs_channel_id))
         if pairs_channel:
             await pairs_channel.send(f"💖 **New Match!** {user1.mention} and {user2.mention} have been paired by Cupid! 🏹")
 
+    # 4. Create the private 24-hour Cafe channel
     cafe_category_id = config.get("cafe_category_id")
     if cafe_category_id:
         cafe_category = interaction.guild.get_channel(int(cafe_category_id))
         if cafe_category:
+            # Set permissions so only the two users, staff, and the bot can see the channel
             overwrites = {
                 interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
                 user1: discord.PermissionOverwrite(read_messages=True, send_messages=True),
@@ -453,73 +429,60 @@ async def manual_pair(interaction: discord.Interaction, user1: discord.Member, u
                 interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
             }
             
+            # Allow staff to see the cafe if a staff role was set up
             staff_role_id = config.get("staff_role_id")
             if staff_role_id:
                 staff_role = interaction.guild.get_role(int(staff_role_id))
                 if staff_role:
                     overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
+            # Create the actual channel
             cafe_channel = await cafe_category.create_text_channel(
                 name=f"☕-cafe-{user1.name}-{user2.name}",
                 overwrites=overwrites,
                 topic="Your 24-hour private cafe. Be respectful and have fun!"
             )
             
-            # --- FETCH LIKES FOR ICEBREAKER ---
-            profile1 = database.get_profile(user1.id, interaction.guild.id)
-            profile2 = database.get_profile(user2.id, interaction.guild.id)
-            
-            likes1 = profile1.get('likes', []) if profile1 else ["Nothing listed"]
-            likes2 = profile2.get('likes', []) if profile2 else ["Nothing listed"]
-            
-            import analyzer
-            icebreaker_text = analyzer.generate_icebreaker(likes1, likes2)
+            await cafe_channel.send(f"Welcome to your private cafe, {user1.mention} and {user2.mention}! ☕\nYou have 24 hours to chat and see if you vibe. Good luck! 💖")
 
-            # --- SEND THE FANCY MESSAGE ---
-            embed = discord.Embed(
-                title="☕ Welcome to your Private Cafe!",
-                description=f"You have **24 hours** to chat and see if you vibe. Before the timer runs out, click the buttons below to decide if you want to stay matched!",
-                color=discord.Color.purple()
-            )
-            embed.add_field(name="🤖 Cupid's Icebreaker:", value=f"*{icebreaker_text}*")
-            
-            await cafe_channel.send(
-                content=f"{user1.mention} {user2.mention}",
-                embed=embed,
-                view=CafeActionView(user1.id, user2.id)
-            )
-
+    # 5. Confirm to the staff member who ran the command
     await interaction.followup.send(f"🏹 Successfully paired {user1.name} & {user2.name}! Private cafe created.", ephemeral=True)
 
 
 @bot.tree.command(name="unpair", description="Staff: Manually break a pair")
 @app_commands.default_permissions(manage_messages=True)
 async def manual_unpair(interaction: discord.Interaction, user1: discord.Member, user2: discord.Member):
+    # Defer the response for channel deletion
     await interaction.response.defer(ephemeral=True)
     
+    # 1. Update the database
     database.end_pairing(user1.id, user2.id, interaction.guild.id)
-    config = database.get_config(interaction.guild.id)
     
+    # 2. Fetch the server configuration
+    config = database.get_config(interaction.guild.id)
     if not config:
         return await interaction.followup.send("❌ Server not configured.", ephemeral=True)
         
+    # 3. Send the public unpair announcement
     unpairs_channel_id = config.get("unpairs_channel_id")
     if unpairs_channel_id:
         unpairs_channel = interaction.guild.get_channel(int(unpairs_channel_id))
         if unpairs_channel:
             await unpairs_channel.send(f"💔 **Match Ended:** The pairing between {user1.mention} and {user2.mention} has been broken.")
 
+    # 4. Find and delete the active cafe channel
     cafe_category_id = config.get("cafe_category_id")
     if cafe_category_id:
         cafe_category = interaction.guild.get_channel(int(cafe_category_id))
         if cafe_category:
             for channel in cafe_category.text_channels:
+                # We check the overwrites to find the specific channel belonging to these two users
                 if user1 in channel.members and user2 in channel.members:
                     await channel.delete(reason="Manual unpair requested by staff.")
                     break
 
+    # 5. Confirm to the staff member
     await interaction.followup.send(f"💔 Successfully unpaired {user1.name} & {user2.name} and deleted their cafe.", ephemeral=True)
-
 
 @bot.tree.command(name="time-left", description="Check match time")
 async def time_left(interaction: discord.Interaction):
@@ -535,65 +498,84 @@ async def spawn_panel(interaction: discord.Interaction):
 @bot.tree.command(name="help", description="List commands")
 async def help_cmd(interaction: discord.Interaction):
     embed = discord.Embed(title="🏹 Matchmaker Bot Commands", description="Here is everything you can do:", color=discord.Color.purple())
+    
     embed.add_field(name="🛠️ Admin Commands", value="`/setup` - Configure all channels and roles.\n`/spawn-community-panel` - Drop the support ticket and staff app buttons in a channel.", inline=False)
+    
+    # Added /request-unpair to the Player Commands list below
     embed.add_field(name="💖 Player Commands", value="`/open-ticket` - Start your swiping journey.\n`/my-profile` - View and edit your dating intro.\n`/time-left` - Check how much time is left with your match.\n`/request-unpair` - Open a ticket to unpair from your match.", inline=False)
+    
     embed.add_field(name="🛡️ Staff Commands", value="`/pair` - Manually pair two users.\n`/unpair` - Manually break a pairing.\n`/watchlist-add` & `/watchlist` - Keep track of suspicious users.", inline=False)
+
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
+import discord
+from discord import app_commands
+import time # Needed for the timestamp
 
 @bot.tree.command(name="request-unpair", description="Open a ticket to request unpairing from your match.")
 async def request_unpair_ticket_cmd(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     
+    # 1. Fetch pair info from your database
     pair_info = database.get_user_pairing(interaction.user.id, interaction.guild.id)
+    
     if not pair_info:
         return await interaction.followup.send("❌ You don't have an active match to unpair from!", ephemeral=True)
         
-    partner_id = pair_info.get('user2_id') if str(pair_info.get('user1_id')) == str(interaction.user.id) else pair_info.get('user1_id')
-    paired_timestamp = pair_info.get('start_time')
+    # --- DB ASSUMPTION SETUP ---
+    # Assuming your database returns a dictionary or object with the partner's ID and the time they matched.
+    # Adjust these keys based on how your database actually returns the data!
+    partner_id = pair_info['partner_id'] 
+    paired_timestamp = pair_info['paired_timestamp'] # Should be a Unix timestamp (e.g., 1712780000)
     
-    # Safely convert ISO timestamp from DB to Unix timestamp for Discord
-    try:
-        from datetime import datetime, timezone
-        dt = datetime.fromisoformat(paired_timestamp.replace('Z', '+00:00'))
-        unix_time = int(dt.timestamp())
-    except:
-        unix_time = int(time.time())
-    
+    # 2. Set up permissions for the new ticket channel (Private to the user and the bot)
     overwrites = {
         interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
         interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
         interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
     }
     
+    # Optional: If you have a specific category for tickets, fetch it here
+    # category = discord.utils.get(interaction.guild.categories, name="Tickets")
+    
+    # 3. Create the text channel
     ticket_channel = await interaction.guild.create_text_channel(
         name=f"unpair-{interaction.user.name}",
-        overwrites=overwrites
+        overwrites=overwrites,
+        # category=category # Uncomment if you are using a category
     )
     
+    # 4. Create the Informational Embed
     embed = discord.Embed(
         title="💔 Unpair Request Ticket",
         description="Hi! Please leave a brief message explaining why you want to unpair. A staff member will review your request and respond here as soon as possible.",
         color=discord.Color.dark_theme()
     )
+    
     embed.add_field(name="User Requesting", value=interaction.user.mention, inline=True)
     embed.add_field(name="Current Partner", value=f"<@{partner_id}>", inline=True)
-    embed.add_field(name="Paired For", value=f"<t:{unix_time}:R>", inline=False)
     
+    # <t:timestamp:R> tells Discord to format it dynamically (e.g., "5 days ago")
+    embed.add_field(name="Paired For", value=f"<t:{int(paired_timestamp)}:R>", inline=False)
+    
+    # 5. Send the embed into the newly created ticket channel
     await ticket_channel.send(content=f"Welcome {interaction.user.mention}, staff will review your request shortly.", embed=embed)
+    
+    # 6. Tell the user where to go
     await interaction.followup.send(f"✅ Your unpair request ticket has been created! Please go to {ticket_channel.mention}", ephemeral=True)
-
-
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
     
+    # Loop through every server the bot is currently in
     for guild in bot.guilds:
-        # Fixed the function name here so it matches database.py!
-        server_data = database.get_config(guild.id)
+        server_data = database.get_server_config(guild.id)
         
-        if server_data and 'max_match_time' not in server_data:
-            database.update_config(guild.id, {"max_match_time": 48}) 
+        # If they are missing the new setting, inject the default value!
+        if 'max_match_time' not in server_data:
+            database.update_server_config(guild.id, {"max_match_time": 48}) # 48 hours default
             print(f"Patched missing data for {guild.name}")
 
+# 2. This block is now just a safety check
 if __name__ == "__main__":
     print("⚠️ You are running app.py directly. Use 'python main.py' instead to start the bot AND dashboard.")
