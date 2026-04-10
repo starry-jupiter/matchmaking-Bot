@@ -225,8 +225,8 @@ def callback():
         
     session['token'] = r.json().get('access_token')
     
-    # 🔥 THE FIX: Routes directly to Admin now
-    return redirect('/admin')
+    # 🔙 Reverted back to the lobby!
+    return redirect(url_for('dashboard'))
 
 @app.route('/logout')
 def logout():
