@@ -353,12 +353,6 @@ async def admin_setup(
     else:
         await interaction.response.send_message("❌ Failed to save setup to the database.", ephemeral=True)
 
-@bot.tree.command(name="unpair", description="Staff: Manually break a pair")
-@app_commands.default_permissions(manage_messages=True)
-async def manual_unpair(interaction: discord.Interaction, user1: discord.Member, user2: discord.Member):
-    database.end_pairing(user1.id, user2.id, interaction.guild.id)
-    await interaction.response.send_message(f"💔 Unpaired {user1.mention} and {user2.mention}.")
-
 @bot.tree.command(name="watchlist-add", description="Staff: Watch a user")
 @app_commands.default_permissions(manage_messages=True)
 async def add_wl(interaction: discord.Interaction, target: discord.User, note: str):
