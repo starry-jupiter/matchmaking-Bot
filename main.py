@@ -13,29 +13,23 @@ def run_bot():
     
     token = os.getenv('DISCORD_TOKEN')
     if not token:
-        print("🔴 ERROR: DISCORD_TOKEN not found in environment variables!", flush=True)
+        print("🔴 ERROR: DISCORD_TOKEN not found!", flush=True)
         return
 
-    # The Relentless Retry Loop (Tries 5 times)
-    for attempt in range(5):
-        try:
-            print(f"🟢 3. Bot is attempting to log in (Attempt {attempt + 1}/5)...", flush=True)
-            
-            # Setup the thread's event loop inside the retry so it's fresh every time
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            # This will block and run forever if successful
-            bot.run(token) 
-            break # If the bot shuts down normally, break the loop
-            
-        except Exception as e:
-            print(f"🔴 Discord connection failed: {e}", flush=True)
-            if attempt < 4:
-                print("⏳ Render network still waking up. Retrying in 10 seconds...", flush=True)
-                time.sleep(10)
-            else:
-                print("🔴 Max retries reached. Bot failed to start.", flush=True)
+    # Give Render a generous 15 seconds to wake up its DNS
+    print("⏳ Waiting 15 seconds for Render network to connect...", flush=True)
+    time.sleep(15) 
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        print("🟢 3. Bot is attempting to log in...", flush=True)
+        bot.run(token)
+    except Exception as e:
+        print(f"🔴 Discord Bot Crashed: {e}", flush=True)
+        print("🔄 Forcing Render to restart the container for a fresh network...", flush=True)
+        os._exit(1) # This forces the entire app to reboot!
 
 @flask_app.route('/health')
 def health():
