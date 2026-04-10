@@ -414,7 +414,15 @@ async def spawn_panel(interaction: discord.Interaction):
 
 @bot.tree.command(name="help", description="List commands")
 async def help_cmd(interaction: discord.Interaction):
-    await interaction.response.send_message("Help Menu sent!", ephemeral=True)
+    embed = discord.Embed(title="🏹 Matchmaker Bot Commands", description="Here is everything you can do:", color=discord.Color.purple())
+    
+    embed.add_field(name="🛠️ Admin Commands", value="`/setup` - Configure all channels and roles.\n`/spawn-community-panel` - Drop the support ticket and staff app buttons in a channel.", inline=False)
+    
+    embed.add_field(name="💖 Player Commands", value="`/open-ticket` - Start your swiping journey.\n`/my-profile` - View and edit your dating intro.\n`/time-left` - Check how much time is left with your match.", inline=False)
+    
+    embed.add_field(name="🛡️ Staff Commands", value="`/pair` - Manually pair two users.\n`/unpair` - Manually break a pairing.\n`/watchlist-add` & `/watchlist` - Keep track of suspicious users.", inline=False)
+
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # 2. This block is now just a safety check

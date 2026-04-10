@@ -24,7 +24,7 @@ REDIRECT_URI = "https://matchmaking-bot-q2v5.onrender.com"
 
 # Safely encode the URL so Discord doesn't complain
 encoded_uri = urllib.parse.quote(REDIRECT_URI, safe='')
-OAUTH_URL = f"https://discord.com/oauth2/authorize?client_id=1492121294819557436"
+OAUTH_URL = f"https://discord.com/oauth2/authorize?client_id=1492121294819557436&response_type=code&redirect_uri=https%3A%2F%2Fmatchmaking-bot-q2v5.onrender.com%2Fcallback&scope=identify+guilds"
 DISCORD_API_BASE = "https://discord.com/api/v10"
 
 # ==========================================
