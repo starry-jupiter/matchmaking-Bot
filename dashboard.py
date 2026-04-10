@@ -20,7 +20,7 @@ DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
 DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
 
 # 🚨 PUT YOUR NEW FRANKFURT WORKSPACE URL HERE 🚨
-REDIRECT_URI = "https://YOUR-NEW-RENDER-URL.onrender.com/callback"
+REDIRECT_URI = "https://matchmaking-bot-q2v5.onrender.com"
 
 # Safely encode the URL so Discord doesn't complain
 encoded_uri = urllib.parse.quote(REDIRECT_URI, safe='')
