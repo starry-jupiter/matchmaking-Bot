@@ -416,8 +416,6 @@ async def spawn_panel(interaction: discord.Interaction):
 async def help_cmd(interaction: discord.Interaction):
     await interaction.response.send_message("Help Menu sent!", ephemeral=True)
 
-# 1. Create the bot instance GLOBALLY so main.py can see it
-bot = MatchmakingBot()
 
 # 2. This block is now just a safety check
 if __name__ == "__main__":
