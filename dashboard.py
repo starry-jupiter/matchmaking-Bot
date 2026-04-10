@@ -1,10 +1,11 @@
 import os
+import urllib.parse
 import requests
 from flask import Flask, render_template_string, redirect, request, session, url_for
 from dotenv import load_dotenv
 
 import database
-from admin import admin_bp  # <--- FIX: Import from admin, not dashboard!
+from admin import admin_bp  
 
 load_dotenv()
 
@@ -14,13 +15,16 @@ app.secret_key = os.getenv("FLASK_SECRET_KEY", "super-secret-key-change-me")
 # Register the admin panel so Flask knows it exists
 app.register_blueprint(admin_bp)
 
-# ... (keep all your OAuth and routes exactly the same) ...
-
 # --- DISCORD OAUTH2 SETTINGS ---
 DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
 DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
-REDIRECT_URI = "https://matchmaking-bot-ojbx.onrender.com/callback"
-OAUTH_URL = f"https://discord.com/api/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify%20guilds"
+
+# 🚨 PUT YOUR NEW FRANKFURT WORKSPACE URL HERE 🚨
+REDIRECT_URI = "https://YOUR-NEW-RENDER-URL.onrender.com/callback"
+
+# Safely encode the URL so Discord doesn't complain
+encoded_uri = urllib.parse.quote(REDIRECT_URI, safe='')
+OAUTH_URL = f"https://discord.com/oauth2/authorize?client_id={DISCORD_CLIENT_ID}&redirect_uri={encoded_uri}&response_type=code&scope=identify"
 DISCORD_API_BASE = "https://discord.com/api/v10"
 
 # ==========================================
