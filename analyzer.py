@@ -58,7 +58,8 @@ def analyze_intro(user_intro):
         return json.loads(chat.choices[0].message.content)
     except Exception as e:
         print(f"Error analyzing intro: {e}")
-        return {"is_toxic": True, "toxic_reason": "API Error"}
+        # THIS is the magic line that will send the real crash reason to Discord!
+        return {"is_toxic": True, "toxic_reason": f"Crash Reason: {str(e)}"}
 
 def generate_icebreaker(likes1, likes2):
     prompt = f"""
