@@ -196,9 +196,6 @@ HTML_PRIVACY = """
 """
 
 # ==========================================
-# 2. OAUTH2 AND ROUTING LOGIC
-# ==========================================
-
 @app.route('/')
 def home():
     # 🔥 The Auto-Skip logic has been removed here!
@@ -227,7 +224,9 @@ def callback():
     if r.status_code != 200: return f"Failed to login: {r.text}", 400
         
     session['token'] = r.json().get('access_token')
-    return redirect(url_for('dashboard'))
+    
+    # 🔥 THE FIX: Routes directly to Admin now
+    return redirect('/admin')
 
 @app.route('/logout')
 def logout():
