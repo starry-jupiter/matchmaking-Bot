@@ -52,13 +52,12 @@ def analyze_intro(user_intro):
     try:
         chat = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama3-8b-8192", 
+            model="llama-3.1-8b-instant", # Updated to a supported model
             response_format={"type": "json_object"}
         )
         return json.loads(chat.choices[0].message.content)
     except Exception as e:
         print(f"Error analyzing intro: {e}")
-        # THIS is the magic line that will send the real crash reason to Discord!
         return {"is_toxic": True, "toxic_reason": f"Crash Reason: {str(e)}"}
 
 def generate_icebreaker(likes1, likes2):
@@ -73,7 +72,7 @@ def generate_icebreaker(likes1, likes2):
     try:
         chat = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama3-8b-8192",
+            model="llama-3.1-8b-instant", # Updated to a supported model
             temperature=0.7,
             max_tokens=100
         )
