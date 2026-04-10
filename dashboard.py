@@ -8,9 +8,10 @@ import database
 from admin import admin_bp  
 
 load_dotenv()
-
+from admin import admin_bp
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "super-secret-key-change-me")
+
 
 # Register the admin panel so Flask knows it exists
 app.register_blueprint(admin_bp)
