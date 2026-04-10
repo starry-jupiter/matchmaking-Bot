@@ -26,7 +26,6 @@ def get_config(guild_id):
         print(f"Error fetching config: {e}")
         return None
 
-
 # --- PROFILE MANAGEMENT ---
 def save_profile(user_id, guild_id, p, raw_text):
     data = {
@@ -70,7 +69,6 @@ def add_vouch(user_id, guild_id):
             return True
         return False
     except Exception as e: return False
-
 
 # --- MATCHING & SWIPING ---
 def get_strict_matches(user_id, guild_id):
@@ -122,7 +120,6 @@ def did_they_like_me(my_id, their_id, guild_id):
         return len(response.data) > 0
     except Exception as e: return False
 
-
 # --- PAIRING TIMERS & HISTORY ---
 def create_pairing(user1_id, user2_id, guild_id):
     try:
@@ -160,9 +157,9 @@ def get_user_history(user_id, guild_id):
                 history.append(p)
         return history
     except Exception as e: return []
+
 def get_total_users_count(guild_id):
     try:
-        # Safely fetch the user IDs and count the length of the list
         response = supabase.table("users").select("user_id").eq("guild_id", str(guild_id)).execute()
         return len(response.data) if response.data else 0
     except Exception as e:
@@ -171,7 +168,6 @@ def get_total_users_count(guild_id):
 
 def get_active_pairs_count(guild_id):
     try:
-        # We ALREADY have a working function for this! Let's just use it.
         pairs = get_active_pairs(guild_id)
         return len(pairs) if pairs else 0
     except Exception as e:
@@ -180,49 +176,8 @@ def get_active_pairs_count(guild_id):
 
 def get_total_swipes_count(guild_id):
     try:
-        # Safely fetch swipes. (If you don't have a 'swipes' table yet, this safely returns 0)
         response = supabase.table("swipes").select("id").eq("guild_id", str(guild_id)).execute()
         return len(response.data) if response.data else 0
     except Exception as e:
         print(f"Swipes Count Error: {e}")
         return 0
-def get_config(guild_id):
-    """Fetches the server's configuration from the database."""
-    try:
-        response = supabase.table("server_configs").select("*").eq("guild_id", str(guild_id)).execute()
-        if response.data:
-            return response.data[0]
-        return None
-    except Exception as e:
-        print(f"Error fetching config: {e}")
-        return None
-
-def update_config(guild_id, config_data):
-    """Updates or creates a server's configuration."""
-    try:
-        config_data["guild_id"] = str(guild_id)
-        # Upsert means "update if it exists, insert if it doesn't"
-        supabase.table("server_configs").upsert(config_data).execute()
-        return True
-    except Exception as e:
-        print(f"Error updating config: {e}")
-        return False
-    
-def get_config(guild_id):
-    """Fetches the server's configuration from Supabase."""
-    try:
-        response = supabase.table("server_configs").select("*").eq("guild_id", str(guild_id)).execute()
-        return response.data[0] if response.data else None
-    except Exception as e:
-        print(f"Error fetching config: {e}")
-        return None
-
-def update_config(guild_id, config_data):
-    """Updates or creates a server's configuration."""
-    try:
-        config_data["guild_id"] = str(guild_id)
-        supabase.table("server_configs").upsert(config_data).execute()
-        return True
-    except Exception as e:
-        print(f"Error updating config: {e}")
-        return False
