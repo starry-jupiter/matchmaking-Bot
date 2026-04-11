@@ -577,7 +577,7 @@ async def open_ticket(interaction: discord.Interaction):
     await ticket.send(f"Welcome {interaction.user.mention}!", view=TicketDashboardView())
     await interaction.followup.send(f"✅ Created: {ticket.mention}", ephemeral=True)
 
-@bot.tree.command(name="my-profile", description="View your profile and dating stats")
+@bot.tree.command(name="my-profile", description="View your profile and matchmaking stats")
 async def my_profile(interaction: discord.Interaction):
     data = database.get_profile(interaction.user.id, interaction.guild.id)
     if not data:
@@ -650,7 +650,7 @@ async def spawn_panel(interaction: discord.Interaction):
 async def help_cmd(interaction: discord.Interaction):
     embed = discord.Embed(title="🏹 Matchmaker Bot Commands", description="For more info please visit https://starry-jupiter.github.io/RedPandaBotSite/", color=discord.Color.purple())
     embed.add_field(name="🛠️ Admin Commands", value="`/setup` - Configure all channels and roles.\n`/spawn-community-panel` - Drop the support ticket and staff app buttons in a channel.", inline=False)
-    embed.add_field(name="💖 Player Commands", value="`/open-ticket` - Start your swiping journey.\n`/my-profile` - View and edit your dating intro.\n`/time-left` - Check how much time is left with your match.\n`/request-unpair` - Open a ticket to unpair from your match.", inline=False)
+    embed.add_field(name="💖 Player Commands", value="`/open-ticket` - Start your swiping journey.\n`/my-profile` - View and edit your matchmaking intro.\n`/time-left` - Check how much time is left with your match.\n`/request-unpair` - Open a ticket to unpair from your match.", inline=False)
     embed.add_field(name="🛡️ Staff Commands", value="`/pair` - Manually pair two users.\n`/unpair` - Manually break a pairing.\n`/watchlist-add` `/watchlist-remove` & `/watchlist` - Keep track of suspicious users.", inline=False)
     await interaction.response.send_message(embed=embed, ephemeral= False)
 
