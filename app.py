@@ -406,6 +406,16 @@ class MatchManager(commands.Cog):
                 watchlist_db[guild_id][message.author.id] = {"note": f"AUTO-FLAG: {parsed.get('toxic_reason')}", "ticket_ban": True}
                 await message.reply(f"🛑 Flagged for toxicity: {parsed.get('toxic_reason')}")
                 await message.channel.edit(name=f"flagged-{message.author.name}")
+                
+                # --- NEW: PING STAFF FOR TOXICITY ---
+                staff_chan_id = config.get("staff_channel_id")
+                staff_role_id = config.get("staff_role_id")
+                ping = f"<@&{staff_role_id}> " if staff_role_id else ""
+                
+                if staff_chan_id:
+                    staff_chan = message.guild.get_channel(int(staff_chan_id))
+                    if staff_chan:
+                        await staff_chan.send(f"🚨 {ping}**TOXICITY ALERT:** {message.author.mention} was auto-flagged. Reason: {parsed.get('toxic_reason')}. Ticket: {message.channel.mention}")
                 return
 
             # Handle Underage
@@ -415,11 +425,15 @@ class MatchManager(commands.Cog):
                 await message.channel.edit(name=f"underage-{message.author.name}")
                 await message.channel.set_permissions(message.author, send_messages=False)
                 
+                # --- UPDATE: PING STAFF FOR UNDERAGE ---
                 staff_chan_id = config.get("staff_channel_id")
+                staff_role_id = config.get("staff_role_id")
+                ping = f"<@&{staff_role_id}> " if staff_role_id else ""
+                
                 if staff_chan_id:
                     staff_chan = message.guild.get_channel(int(staff_chan_id))
                     if staff_chan:
-                        await staff_chan.send(f"⚠️ **UNDERAGE ALERT:** {message.author.mention} submitted a profile with age **{user_age}**. Ticket: {message.channel.mention}")
+                        await staff_chan.send(f"⚠️ {ping}**UNDERAGE ALERT:** {message.author.mention} submitted a profile with age **{user_age}**. Ticket: {message.channel.mention}")
                         
                 return await message.reply("🛑 **Access Denied:** You must be 13 or older. This ticket is now locked.")
 
