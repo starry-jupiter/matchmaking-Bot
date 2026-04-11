@@ -369,9 +369,11 @@ class SwipeView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(label='✅ Express Interest', style=discord.ButtonStyle.success)
-    async def interest(self, interaction, button):
+    async def interest(self, interaction: discord.Interaction, button: discord.ui.Button):
         is_match = database.record_swipe(self.uid, self.tid, self.gid, True)
+        
         if is_match:
+            # 1. HANDLE INSTANT MATCH
             database.create_pairing(self.uid, self.tid, self.gid)
             await interaction.response.send_message("🎉 IT'S A MATCH! A private cafe is being set up for you both.", ephemeral=True)
             
@@ -381,7 +383,31 @@ class SwipeView(discord.ui.View):
             if user1 and user2:
                 asyncio.create_task(create_cafe_channel(interaction.guild, user1, user2))
         else:
-            await interaction.response.send_message("✅ Liked!", ephemeral=True)
+            # 2. SEND THE FUNCTIONAL "MATCH REQUEST" TO THE TARGET
+            await interaction.response.send_message("✅ Liked! They have been notified.", ephemeral=True)
+            
+            target_ticket = get_ticket_channel(interaction.guild, int(self.tid))
+            if target_ticket:
+                # Fetch the profile of the person who just swiped (the current user)
+                swiper_profile = database.get_profile(self.uid, self.gid)
+                if swiper_profile:
+                    # Create a new embed for the target to see
+                    embed = discord.Embed(
+                        title=f"🔔 Someone is interested in you!",
+                        description=f"**{swiper_profile.get('name')} ({swiper_profile.get('age')})** swiped right on your profile! Do you want to match back?\n\n**Their Intro:**\n{swiper_profile.get('raw_intro')}",
+                        color=discord.Color.gold()
+                    )
+                    
+                    # Create a new SwipeView for the target where 'uid' is the target and 'tid' is the swiper
+                    # This allows the target to click "Express Interest" and trigger the match instantly
+                    view = SwipeView(uid=self.tid, tid=self.uid, gid=self.gid)
+                    
+                    await target_ticket.send(
+                        content=f"Hey <@{self.tid}>, you have a new match request!",
+                        embed=embed,
+                        view=view
+                    )
+            
         await self.show_next(interaction)
 
     @discord.ui.button(label='❌ Pass', style=discord.ButtonStyle.danger)
