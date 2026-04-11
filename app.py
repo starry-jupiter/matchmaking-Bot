@@ -35,7 +35,46 @@ def get_ticket_channel(guild, user_id):
 class MatchmakingBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix="!", intents=discord.Intents.all())
-    
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        if message.author.bot or not message.guild: return
+        config = database.get_config(message.guild.id)
+        if not config or str(message.channel.category_id) != config.get("match_category_id"): return
+        
+        if "➤" in message.content:
+            await message.add_reaction("⏳")
+            parsed = analyzer.analyze_intro(message.content)
+            
+            # 1. CHECK FOR TOXICITY (CREEPS/HARASSMENT)
+            if parsed.get("is_toxic"):
+                await message.reply(f"🛑 Flagged for toxicity: {parsed.get('toxic_reason')}")
+                # Optional: Rename channel to flagged-user
+                await message.channel.edit(name=f"flagged-{message.author.name}")
+                return
+
+            # 2. CHECK FOR UNDERAGE (UNDER 13)
+            user_age = parsed.get("age", 0)
+            if user_age < 13:
+                # Rename the ticket so staff see it immediately
+                await message.channel.edit(name=f"underage-{message.author.name}")
+                
+                # Lock the ticket (remove user's ability to send more messages)
+                await message.channel.set_permissions(message.author, send_messages=False, read_messages=True)
+                
+                # Alert Staff in the log channel
+                staff_chan_id = config.get("staff_channel_id")
+                if staff_chan_id:
+                    staff_chan = message.guild.get_channel(int(staff_chan_id))
+                    if staff_chan:
+                        await staff_chan.send(f"⚠️ **UNDERAGE ALERT:** {message.author.mention} submitted a profile with age **{user_age}**. Ticket: {message.channel.mention}")
+                
+                return await message.reply("🛑 **Access Denied:** You must be 13 or older to use Discord and this bot. This ticket has been locked for staff review.")
+
+            # 3. PROCEED NORMALLY IF AGE IS OK
+            database.save_profile(message.author.id, message.guild.id, parsed, message.content)
+            await message.reply("✅ Profile saved! Swiping starts now.")
+            view = SwipeView(message.author.id, None, message.guild.id)
+            await view.show_next_init(message.channel)
     async def setup_hook(self):
         await self.add_cog(MatchManager(self))
         # Persist Views across restarts
