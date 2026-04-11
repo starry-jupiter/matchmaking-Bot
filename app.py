@@ -652,7 +652,7 @@ async def help_cmd(interaction: discord.Interaction):
     embed.add_field(name="🛠️ Admin Commands", value="`/setup` - Configure all channels and roles.\n`/spawn-community-panel` - Drop the support ticket and staff app buttons in a channel.", inline=False)
     embed.add_field(name="💖 Player Commands", value="`/open-ticket` - Start your swiping journey.\n`/my-profile` - View and edit your dating intro.\n`/time-left` - Check how much time is left with your match.\n`/request-unpair` - Open a ticket to unpair from your match.", inline=False)
     embed.add_field(name="🛡️ Staff Commands", value="`/pair` - Manually pair two users.\n`/unpair` - Manually break a pairing.\n`/watchlist-add` `/watchlist-remove` & `/watchlist` - Keep track of suspicious users.", inline=False)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.response.send_message(embed=embed, ephemeral= False)
 
 @bot.tree.command(name="request-unpair", description="Open a ticket to request unpairing from your match.")
 async def request_unpair_ticket_cmd(interaction: discord.Interaction):
