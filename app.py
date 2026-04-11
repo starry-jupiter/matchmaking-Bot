@@ -380,6 +380,7 @@ class SwipeView(discord.ui.View):
 # ---------------------------------------------------------
 # AUTOMATION COG (Handles Messages & Timers)
 # ---------------------------------------------------------
+@commands.Cog.listener()
 class MatchManager(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -397,13 +398,13 @@ class MatchManager(commands.Cog):
             await message.add_reaction("⏳")
             parsed = analyzer.analyze_intro(message.content)
             
-            # Setup Auto-Watchlist Key
-            wl_key = f"{message.guild.id}_{bot.user.id}"
-            if wl_key not in watchlist_db: watchlist_db[wl_key] = {}
+            # Setup Server Watchlist Key
+            guild_id = str(message.guild.id)
+            if guild_id not in watchlist_db: watchlist_db[guild_id] = {}
 
             # Handle Toxicity
             if parsed.get("is_toxic"):
-                watchlist_db[wl_key][message.author.id] = f"AUTO-FLAG: {parsed.get('toxic_reason')}"
+                watchlist_db[guild_id][message.author.id] = {"note": f"AUTO-FLAG: {parsed.get('toxic_reason')}", "ticket_ban": True}
                 await message.reply(f"🛑 Flagged for toxicity: {parsed.get('toxic_reason')}")
                 await message.channel.edit(name=f"flagged-{message.author.name}")
                 return
@@ -411,7 +412,7 @@ class MatchManager(commands.Cog):
             # Handle Underage
             user_age = parsed.get("age", 0)
             if user_age < 13:
-                watchlist_db[wl_key][message.author.id] = f"AUTO-FLAG: Underage ({user_age})"
+                watchlist_db[guild_id][message.author.id] = {"note": f"AUTO-FLAG: Underage ({user_age})", "ticket_ban": True}
                 await message.channel.edit(name=f"underage-{message.author.name}")
                 await message.channel.set_permissions(message.author, send_messages=False)
                 
@@ -491,37 +492,49 @@ async def admin_setup(
     else:
         await interaction.response.send_message("❌ Failed to save setup to the database.", ephemeral=True)
 
-@bot.tree.command(name="watchlist-add", description="Staff: Watch a user")
+@bot.tree.command(name="watchlist-add", description="Staff: Watch a user and optionally ban from tickets")
+@app_commands.describe(ticket_ban="Set to True to prevent them from opening tickets")
 @app_commands.default_permissions(manage_messages=True)
-async def add_wl(interaction: discord.Interaction, target: discord.User, note: str):
-    wl_key = f"{interaction.guild.id}_{interaction.user.id}"
-    if wl_key not in watchlist_db: watchlist_db[wl_key] = {}
-    watchlist_db[wl_key][target.id] = note
-    await interaction.response.send_message(f"✅ Added {target.mention} to watchlist.", ephemeral=True)
+async def add_wl(interaction: discord.Interaction, target: discord.User, note: str, ticket_ban: bool = False):
+    guild_id = str(interaction.guild.id)
+    if guild_id not in watchlist_db: watchlist_db[guild_id] = {}
     
-@bot.tree.command(name="watchlist-remove", description="Staff: Remove a user from your watchlist")
-@app_commands.default_permissions(manage_messages=True)
-async def remove_wl(interaction: discord.Interaction, target: discord.User):
-    wl_key = f"{interaction.guild.id}_{interaction.user.id}"
+    watchlist_db[guild_id][target.id] = {"note": note, "ticket_ban": ticket_ban}
     
-    # Check if they have a watchlist and if the target is actually on it
-    if wl_key in watchlist_db and target.id in watchlist_db[wl_key]:
-        del watchlist_db[wl_key][target.id]
-        await interaction.response.send_message(f"✅ Removed {target.mention} from your watchlist.", ephemeral=True)
-    else:
-        await interaction.response.send_message(f"❌ {target.mention} is not currently on your watchlist.", ephemeral=True)
-@bot.tree.command(name="watchlist", description="Staff: View your watchlist")
+    status = "🚫 Ticket Banned" if ticket_ban else "👀 Watched"
+    await interaction.response.send_message(f"✅ {target.mention} added to watchlist. Status: **{status}**", ephemeral=True)
+
+@bot.tree.command(name="watchlist", description="Staff: View the server watchlist")
 @app_commands.default_permissions(manage_messages=True)
 async def view_wl(interaction: discord.Interaction):
-    wl_key = f"{interaction.guild.id}_{interaction.user.id}"
-    if wl_key not in watchlist_db: return await interaction.response.send_message("Empty.")
-    msg = "\n".join([f"<@{tid}>: {n}" for tid, n in watchlist_db[wl_key].items()])
+    guild_id = str(interaction.guild.id)
+    if guild_id not in watchlist_db or not watchlist_db[guild_id]: 
+        return await interaction.response.send_message("The watchlist is currently empty.", ephemeral=True)
+    
+    msg = "**🚨 Server Watchlist:**\n"
+    for tid, data in watchlist_db[guild_id].items():
+        ban_status = "🚫 [BANNED]" if data.get("ticket_ban") else "👀 [WATCHED]"
+        msg += f"• <@{tid}> {ban_status}: {data['note']}\n"
+        
     await interaction.response.send_message(msg, ephemeral=True)
 
+@bot.tree.command(name="watchlist-remove", description="Staff: Remove a user from the watchlist")
+@app_commands.default_permissions(manage_messages=True)
+async def remove_wl(interaction: discord.Interaction, target: discord.User):
+    guild_id = str(interaction.guild.id)
+    if guild_id in watchlist_db and target.id in watchlist_db[guild_id]:
+        del watchlist_db[guild_id][target.id]
+        await interaction.response.send_message(f"✅ Removed {target.mention} from the watchlist.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"❌ {target.mention} is not on the watchlist.", ephemeral=True)
 @bot.tree.command(name="open-ticket", description="Start your journey")
 async def open_ticket(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    
+    # 0. Check Watchlist for Ticket Bans
+    guild_id = str(interaction.guild.id)
+    if guild_id in watchlist_db and interaction.user.id in watchlist_db[guild_id]:
+        if watchlist_db[guild_id][interaction.user.id].get("ticket_ban"):
+            return await interaction.followup.send("🛑 **Action Denied:** You have been restricted from opening matchmaking tickets by the moderation team.", ephemeral=True)
     active_pair = database.get_user_pairing(interaction.user.id, interaction.guild.id)
     if active_pair:
         return await interaction.followup.send(
@@ -550,15 +563,19 @@ async def open_ticket(interaction: discord.Interaction):
     await ticket.send(f"Welcome {interaction.user.mention}!", view=TicketDashboardView())
     await interaction.followup.send(f"✅ Created: {ticket.mention}", ephemeral=True)
 
-@bot.tree.command(name="my-profile", description="View your profile and vouches")
+@bot.tree.command(name="my-profile", description="View your profile and dating stats")
 async def my_profile(interaction: discord.Interaction):
     data = database.get_profile(interaction.user.id, interaction.guild.id)
     if not data:
         return await interaction.response.send_message("❌ You don't have a profile yet! Use /open-ticket to start.", ephemeral=True)
     
     vouches = data.get('vouches', 0)
-    embed = discord.Embed(title=f"👤 {data.get('name')}'s Profile", description=f"**Age:** {data.get('age')}\n**Vouches:** ✅ {vouches}", color=discord.Color.green())
-    embed.add_field(name="Intro", value=data.get('raw_intro', 'No intro provided.'), inline=False)
+    embed = discord.Embed(title=f"👤 {data.get('name')}'s Dashboard", color=discord.Color.green())
+    embed.add_field(name="Age", value=str(data.get('age')), inline=True)
+    embed.add_field(name="Community Rating", value=f"✅ {vouches} Green Flags", inline=True)
+    embed.add_field(name="Discord Account Age", value=f"<t:{int(interaction.user.created_at.timestamp())}:R>", inline=False)
+    embed.add_field(name="Your Current Intro", value=f"```{data.get('raw_intro', 'No intro provided.')}```", inline=False)
+    
     await interaction.response.send_message(embed=embed, view=MyProfileView(), ephemeral=True)
 
 @bot.tree.command(name="vouch", description="Give a Green Flag")
@@ -620,7 +637,7 @@ async def help_cmd(interaction: discord.Interaction):
     embed = discord.Embed(title="🏹 Matchmaker Bot Commands", description="Here is everything you can do:", color=discord.Color.purple())
     embed.add_field(name="🛠️ Admin Commands", value="`/setup` - Configure all channels and roles.\n`/spawn-community-panel` - Drop the support ticket and staff app buttons in a channel.", inline=False)
     embed.add_field(name="💖 Player Commands", value="`/open-ticket` - Start your swiping journey.\n`/my-profile` - View and edit your dating intro.\n`/time-left` - Check how much time is left with your match.\n`/request-unpair` - Open a ticket to unpair from your match.", inline=False)
-    embed.add_field(name="🛡️ Staff Commands", value="`/pair` - Manually pair two users.\n`/unpair` - Manually break a pairing.\n`/watchlist-add` & `/watchlist` - Keep track of suspicious users.", inline=False)
+    embed.add_field(name="🛡️ Staff Commands", value="`/pair` - Manually pair two users.\n`/unpair` - Manually break a pairing.\n`/watchlist-add` `/watchlist-remove` & `/watchlist` - Keep track of suspicious users.", inline=False)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="request-unpair", description="Open a ticket to request unpairing from your match.")
@@ -646,6 +663,7 @@ async def request_unpair_ticket_cmd(interaction: discord.Interaction):
     
     await ticket_channel.send(content=f"Welcome {interaction.user.mention}, staff will review your request shortly.", embed=embed, view=SupportTicketView())
     await interaction.followup.send(f"✅ Your unpair request ticket has been created! Please go to {ticket_channel.mention}", ephemeral=True)
+
 
 @bot.event
 async def on_ready():
