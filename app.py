@@ -30,51 +30,12 @@ def get_ticket_channel(guild, user_id):
     return None
 
 # ---------------------------------------------------------
-# BOT CORE INITIALIZATION (Defined early to avoid NameErrors)
+# BOT CORE INITIALIZATION
 # ---------------------------------------------------------
 class MatchmakingBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix="!", intents=discord.Intents.all())
-    @commands.Cog.listener()
-    async def on_message(self, message):
-        if message.author.bot or not message.guild: return
-        config = database.get_config(message.guild.id)
-        if not config or str(message.channel.category_id) != config.get("match_category_id"): return
         
-        if "➤" in message.content:
-            await message.add_reaction("⏳")
-            parsed = analyzer.analyze_intro(message.content)
-            
-            # 1. CHECK FOR TOXICITY (CREEPS/HARASSMENT)
-            if parsed.get("is_toxic"):
-                await message.reply(f"🛑 Flagged for toxicity: {parsed.get('toxic_reason')}")
-                # Optional: Rename channel to flagged-user
-                await message.channel.edit(name=f"flagged-{message.author.name}")
-                return
-
-            # 2. CHECK FOR UNDERAGE (UNDER 13)
-            user_age = parsed.get("age", 0)
-            if user_age < 13:
-                # Rename the ticket so staff see it immediately
-                await message.channel.edit(name=f"underage-{message.author.name}")
-                
-                # Lock the ticket (remove user's ability to send more messages)
-                await message.channel.set_permissions(message.author, send_messages=False, read_messages=True)
-                
-                # Alert Staff in the log channel
-                staff_chan_id = config.get("staff_channel_id")
-                if staff_chan_id:
-                    staff_chan = message.guild.get_channel(int(staff_chan_id))
-                    if staff_chan:
-                        await staff_chan.send(f"⚠️ **UNDERAGE ALERT:** {message.author.mention} submitted a profile with age **{user_age}**. Ticket: {message.channel.mention}")
-                
-                return await message.reply("🛑 **Access Denied:** You must be 13 or older to use Discord and this bot. This ticket has been locked for staff review.")
-
-            # 3. PROCEED NORMALLY IF AGE IS OK
-            database.save_profile(message.author.id, message.guild.id, parsed, message.content)
-            await message.reply("✅ Profile saved! Swiping starts now.")
-            view = SwipeView(message.author.id, None, message.guild.id)
-            await view.show_next_init(message.channel)
     async def setup_hook(self):
         await self.add_cog(MatchManager(self))
         # Persist Views across restarts
@@ -100,7 +61,10 @@ class FlagModal(discord.ui.Modal, title='Report Profile'):
         config = database.get_config(interaction.guild.id)
         if config and config.get("staff_channel_id"):
             chan = interaction.guild.get_channel(int(config["staff_channel_id"]))
-            if chan: await chan.send(f"🚨 **PROFILE REPORT:** {interaction.user.mention} flagged <@{self.target_id}>.\n**Reason:** {self.reason.value}")
+            staff_role_id = config.get("staff_role_id")
+            ping = f"<@&{staff_role_id}> " if staff_role_id else ""
+            if chan: 
+                await chan.send(f"{ping}🚨 **PROFILE REPORT:** {interaction.user.mention} flagged <@{self.target_id}>.\n**Reason:** {self.reason.value}")
         await interaction.response.send_message("✅ Your report has been securely sent to the staff.", ephemeral=True)
 
 class EditProfileModal(discord.ui.Modal, title='Update Your Intro'):
@@ -132,6 +96,7 @@ class MyProfileView(discord.ui.View):
 class TicketDashboardView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
+        
     @discord.ui.button(label='🆘 Request Staff Help', style=discord.ButtonStyle.danger, custom_id='ticket_help_btn')
     async def help_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         config = database.get_config(interaction.guild.id)
@@ -140,55 +105,31 @@ class TicketDashboardView(discord.ui.View):
             if staff_chan: await staff_chan.send(f"🚨 **TICKET HELP REQUEST:** {interaction.user.mention} needs assistance in {interaction.channel.mention}!")
         await interaction.response.send_message("✅ Staff have been notified.", ephemeral=True)
 
-   # ... (end of your previous function/class)
-
-@bot.tree.command(name="request-unpair", description="Open a ticket to request unpairing from your match.")
-async def request_unpair_ticket_cmd(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    
-    pair_info = database.get_user_pairing(interaction.user.id, interaction.guild.id)
-    
-    if not pair_info:
-        return await interaction.followup.send("❌ You don't have an active match to unpair from!", ephemeral=True)
+    @discord.ui.button(label='💔 Request Unpair', style=discord.ButtonStyle.secondary, custom_id='ticket_unpair_req_btn')
+    async def request_unpair(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        pair_info = database.get_user_pairing(interaction.user.id, interaction.guild.id)
+        if not pair_info:
+            return await interaction.followup.send("❌ You don't have an active match to unpair from!", ephemeral=True)
         
-    partner_id = pair_info.get('user2_id') if str(pair_info.get('user1_id')) == str(interaction.user.id) else pair_info.get('user1_id')
-    paired_timestamp = pair_info.get('start_time')
-    
-    try:
-        dt = datetime.fromisoformat(paired_timestamp.replace('Z', '+00:00'))
-        unix_time = int(dt.timestamp())
-    except:
-        unix_time = int(time.time())
-    
-    overwrites = {
-        interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-        interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-        interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
-    }
-    
-    ticket_channel = await interaction.guild.create_text_channel(
-        name=f"unpair-{interaction.user.name}",
-        overwrites=overwrites
-    )
-    
-    embed = discord.Embed(
-        title="💔 Unpair Request Ticket",
-        description="Hi! Please leave a brief message explaining why you want to unpair. A staff member will review your request and respond here as soon as possible.",
-        color=discord.Color.dark_theme()
-    )
-    
-    embed.add_field(name="User Requesting", value=interaction.user.mention, inline=True)
-    embed.add_field(name="Current Partner", value=f"<@{partner_id}>", inline=True)
-    embed.add_field(name="Paired For", value=f"<t:{unix_time}:R>", inline=False)
-    
-    # --- ADDED: THE CLOSE BUTTON VIEW ---
-    await ticket_channel.send(
-        content=f"Welcome {interaction.user.mention}, staff will review your request shortly.", 
-        embed=embed, 
-        view=SupportTicketView() # This uses your existing close button logic
-    )
-    
-    await interaction.followup.send(f"✅ Your unpair request ticket has been created! Please go to {ticket_channel.mention}", ephemeral=True)
+        config = database.get_config(interaction.guild.id)
+        cat = interaction.guild.get_channel(int(config.get("match_category_id")))
+        staff_role_id = config.get("staff_role_id")
+        staff_role = interaction.guild.get_role(int(staff_role_id)) if staff_role_id else None
+        
+        ticket = await cat.create_text_channel(name=f"unpair-{interaction.user.name}")
+        start_time = datetime.fromisoformat(pair_info['start_time'].replace('Z', '+00:00'))
+        duration = datetime.now(timezone.utc) - start_time
+        time_str = f"{duration.days} days and {duration.seconds // 3600} hours"
+        partner_id = pair_info['user2_id'] if str(pair_info['user1_id']) == str(interaction.user.id) else pair_info['user1_id']
+        
+        embed = discord.Embed(title="💔 Unpair Request", color=discord.Color.red())
+        embed.add_field(name="Requester", value=interaction.user.mention)
+        embed.add_field(name="Current Pair", value=f"<@{partner_id}>")
+        embed.add_field(name="Time Paired", value=time_str, inline=False)
+        
+        await ticket.send(f"{staff_role.mention if staff_role else '@Cupid'} assistance requested!", embed=embed, view=SupportTicketView())
+        await interaction.followup.send(f"✅ Unpair ticket created: {ticket.mention}", ephemeral=True)
 
     @discord.ui.button(label='🗑️ Delete Dashboard', style=discord.ButtonStyle.secondary, custom_id='ticket_close_btn')
     async def close_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -395,7 +336,6 @@ class SwipeView(discord.ui.View):
 
     @discord.ui.button(label='✅ Express Interest', style=discord.ButtonStyle.success)
     async def interest(self, interaction, button):
-        # THIS is where the match logic belongs!
         is_match = database.record_swipe(self.uid, self.tid, self.gid, True)
         
         if is_match:
@@ -438,7 +378,7 @@ class SwipeView(discord.ui.View):
         await interaction.response.send_modal(FlagModal(target_id=self.tid))
 
 # ---------------------------------------------------------
-# AUTOMATION COG
+# AUTOMATION COG (Handles Messages & Timers)
 # ---------------------------------------------------------
 class MatchManager(commands.Cog):
     def __init__(self, bot):
@@ -452,12 +392,38 @@ class MatchManager(commands.Cog):
         if message.author.bot or not message.guild: return
         config = database.get_config(message.guild.id)
         if not config or str(message.channel.category_id) != config.get("match_category_id"): return
-        if "➤" in message.content:
+        
+        if "➤" in message.content and "AGE" in message.content.upper():
             await message.add_reaction("⏳")
             parsed = analyzer.analyze_intro(message.content)
+            
+            # Setup Auto-Watchlist Key
+            wl_key = f"{message.guild.id}_{bot.user.id}"
+            if wl_key not in watchlist_db: watchlist_db[wl_key] = {}
+
+            # Handle Toxicity
             if parsed.get("is_toxic"):
+                watchlist_db[wl_key][message.author.id] = f"AUTO-FLAG: {parsed.get('toxic_reason')}"
                 await message.reply(f"🛑 Flagged for toxicity: {parsed.get('toxic_reason')}")
+                await message.channel.edit(name=f"flagged-{message.author.name}")
                 return
+
+            # Handle Underage
+            user_age = parsed.get("age", 0)
+            if user_age < 13:
+                watchlist_db[wl_key][message.author.id] = f"AUTO-FLAG: Underage ({user_age})"
+                await message.channel.edit(name=f"underage-{message.author.name}")
+                await message.channel.set_permissions(message.author, send_messages=False)
+                
+                staff_chan_id = config.get("staff_channel_id")
+                if staff_chan_id:
+                    staff_chan = message.guild.get_channel(int(staff_chan_id))
+                    if staff_chan:
+                        await staff_chan.send(f"⚠️ **UNDERAGE ALERT:** {message.author.mention} submitted a profile with age **{user_age}**. Ticket: {message.channel.mention}")
+                        
+                return await message.reply("🛑 **Access Denied:** You must be 13 or older. This ticket is now locked.")
+
+            # Normal Save
             database.save_profile(message.author.id, message.guild.id, parsed, message.content)
             await message.reply("✅ Profile saved! Swiping starts now.")
             view = SwipeView(message.author.id, None, message.guild.id)
@@ -545,7 +511,6 @@ async def view_wl(interaction: discord.Interaction):
 async def open_ticket(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     
-    # 1. Check if the user is already paired
     active_pair = database.get_user_pairing(interaction.user.id, interaction.guild.id)
     if active_pair:
         return await interaction.followup.send(
@@ -554,15 +519,10 @@ async def open_ticket(interaction: discord.Interaction):
             ephemeral=True
         )
 
-    # 2. Check if they already have an open ticket (preventing duplicate tickets)
     existing_ticket = get_ticket_channel(interaction.guild, interaction.user.id)
     if existing_ticket:
-        return await interaction.followup.send(
-            f"⚠️ You already have an open ticket: {existing_ticket.mention}", 
-            ephemeral=True
-        )
+        return await interaction.followup.send(f"⚠️ You already have an open ticket: {existing_ticket.mention}", ephemeral=True)
 
-    # 3. Proceed with creating a new ticket
     config = database.get_config(interaction.guild.id)
     if not config or not config.get("match_category_id"):
         return await interaction.followup.send("❌ Matchmaking is not set up on this server.", ephemeral=True)
@@ -573,29 +533,23 @@ async def open_ticket(interaction: discord.Interaction):
 
     ticket = await cat.create_text_channel(name=f"ticket-{interaction.user.name}")
     
-    # Set permissions for the new ticket
     await ticket.set_permissions(interaction.user, read_messages=True, send_messages=True)
     await ticket.set_permissions(interaction.guild.default_role, read_messages=False)
 
     await ticket.send(f"Welcome {interaction.user.mention}!", view=TicketDashboardView())
     await interaction.followup.send(f"✅ Created: {ticket.mention}", ephemeral=True)
+
 @bot.tree.command(name="my-profile", description="View your profile and vouches")
 async def my_profile(interaction: discord.Interaction):
     data = database.get_profile(interaction.user.id, interaction.guild.id)
     if not data:
         return await interaction.response.send_message("❌ You don't have a profile yet! Use /open-ticket to start.", ephemeral=True)
     
-    # Get vouch count from the data
     vouches = data.get('vouches', 0)
-    
-    embed = discord.Embed(
-        title=f"👤 {data.get('name')}'s Profile", 
-        description=f"**Age:** {data.get('age')}\n**Vouches:** ✅ {vouches}",
-        color=discord.Color.green()
-    )
+    embed = discord.Embed(title=f"👤 {data.get('name')}'s Profile", description=f"**Age:** {data.get('age')}\n**Vouches:** ✅ {vouches}", color=discord.Color.green())
     embed.add_field(name="Intro", value=data.get('raw_intro', 'No intro provided.'), inline=False)
-    
     await interaction.response.send_message(embed=embed, view=MyProfileView(), ephemeral=True)
+
 @bot.tree.command(name="vouch", description="Give a Green Flag")
 async def vouch_user(interaction: discord.Interaction, match: discord.User):
     database.add_vouch(match.id, interaction.guild.id)
@@ -605,29 +559,19 @@ async def vouch_user(interaction: discord.Interaction, match: discord.User):
 @app_commands.default_permissions(manage_messages=True)
 async def manual_pair(interaction: discord.Interaction, user1: discord.Member, user2: discord.Member):
     await interaction.response.defer(ephemeral=True)
-    
     config = database.get_config(interaction.guild.id)
-    if not config:
-        return await interaction.followup.send("❌ Server not configured. Please run /setup first.")
-    
+    if not config: return await interaction.followup.send("❌ Server not configured.")
     database.create_pairing(user1.id, user2.id, interaction.guild.id)
-    
-    # Delegate to the universal helper function!
     await create_cafe_channel(interaction.guild, user1, user2)
-    
     await interaction.followup.send(f"🏹 Successfully paired {user1.name} & {user2.name}! Private cafe created.", ephemeral=True)
-
 
 @bot.tree.command(name="unpair", description="Staff: Manually break a pair")
 @app_commands.default_permissions(manage_messages=True)
 async def manual_unpair(interaction: discord.Interaction, user1: discord.Member, user2: discord.Member):
     await interaction.response.defer(ephemeral=True)
-    
     database.end_pairing(user1.id, user2.id, interaction.guild.id)
     config = database.get_config(interaction.guild.id)
-    
-    if not config:
-        return await interaction.followup.send("❌ Server not configured.", ephemeral=True)
+    if not config: return await interaction.followup.send("❌ Server not configured.", ephemeral=True)
         
     unpairs_channel_id = config.get("unpairs_channel_id")
     warning_msg = ""
@@ -635,12 +579,8 @@ async def manual_unpair(interaction: discord.Interaction, user1: discord.Member,
     if unpairs_channel_id and str(unpairs_channel_id).isdigit():
         try:
             unpairs_channel = interaction.guild.get_channel(int(unpairs_channel_id))
-            if unpairs_channel:
-                await unpairs_channel.send(f"💔 **Match Ended:** The pairing between {user1.mention} and {user2.mention} has been broken.")
-            else:
-                warning_msg = "\n⚠️ *Warning: Could not find the Unpairs channel.*"
-        except discord.Forbidden:
-            warning_msg = "\n⚠️ *Warning: I don't have permission to send messages in the Unpairs channel!*"
+            if unpairs_channel: await unpairs_channel.send(f"💔 **Match Ended:** The pairing between {user1.mention} and {user2.mention} has been broken.")
+            else: warning_msg = "\n⚠️ *Warning: Could not find the Unpairs channel.*"
         except Exception as e:
             print(f"Unpair Announcement Error: {e}")
 
@@ -652,12 +592,10 @@ async def manual_unpair(interaction: discord.Interaction, user1: discord.Member,
                 if user1 in channel.members and user2 in channel.members:
                     await channel.delete(reason="Manual unpair requested by staff.")
                     break
-
     await interaction.followup.send(f"💔 Successfully unpaired {user1.name} & {user2.name}.{warning_msg}", ephemeral=True)
 
 @bot.tree.command(name="time-left", description="Check match time")
 async def time_left(interaction: discord.Interaction):
-    pair = database.get_user_pairing(interaction.user.id, interaction.guild.id)
     await interaction.response.send_message(f"Time remaining check...", ephemeral=True)
 
 @bot.tree.command(name="spawn-community-panel", description="Drop support panel")
@@ -679,53 +617,32 @@ async def request_unpair_ticket_cmd(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     
     pair_info = database.get_user_pairing(interaction.user.id, interaction.guild.id)
-    
-    if not pair_info:
-        return await interaction.followup.send("❌ You don't have an active match to unpair from!", ephemeral=True)
+    if not pair_info: return await interaction.followup.send("❌ You don't have an active match to unpair from!", ephemeral=True)
         
     partner_id = pair_info.get('user2_id') if str(pair_info.get('user1_id')) == str(interaction.user.id) else pair_info.get('user1_id')
-    paired_timestamp = pair_info.get('start_time')
-    
     try:
-        dt = datetime.fromisoformat(paired_timestamp.replace('Z', '+00:00'))
+        dt = datetime.fromisoformat(pair_info.get('start_time').replace('Z', '+00:00'))
         unix_time = int(dt.timestamp())
-    except:
-        unix_time = int(time.time())
+    except: unix_time = int(time.time())
     
-    overwrites = {
-        interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-        interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-        interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
-    }
+    overwrites = {interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False), interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True), interaction.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)}
+    ticket_channel = await interaction.guild.create_text_channel(name=f"unpair-{interaction.user.name}", overwrites=overwrites)
     
-    ticket_channel = await interaction.guild.create_text_channel(
-        name=f"unpair-{interaction.user.name}",
-        overwrites=overwrites
-    )
-    
-    embed = discord.Embed(
-        title="💔 Unpair Request Ticket",
-        description="Hi! Please leave a brief message explaining why you want to unpair. A staff member will review your request and respond here as soon as possible.",
-        color=discord.Color.dark_theme()
-    )
-    
+    embed = discord.Embed(title="💔 Unpair Request Ticket", description="Hi! Please leave a brief message explaining why you want to unpair. A staff member will review your request and respond here as soon as possible.", color=discord.Color.dark_theme())
     embed.add_field(name="User Requesting", value=interaction.user.mention, inline=True)
     embed.add_field(name="Current Partner", value=f"<@{partner_id}>", inline=True)
     embed.add_field(name="Paired For", value=f"<t:{unix_time}:R>", inline=False)
     
-    await ticket_channel.send(content=f"Welcome {interaction.user.mention}, staff will review your request shortly.", embed=embed)
+    await ticket_channel.send(content=f"Welcome {interaction.user.mention}, staff will review your request shortly.", embed=embed, view=SupportTicketView())
     await interaction.followup.send(f"✅ Your unpair request ticket has been created! Please go to {ticket_channel.mention}", ephemeral=True)
 
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
-    
     for guild in bot.guilds:
         server_data = database.get_config(guild.id)
-        
         if server_data and 'max_match_time' not in server_data:
             database.update_config(guild.id, {"max_match_time": 48}) 
-            print(f"Patched missing data for {guild.name}")
 
 if __name__ == "__main__":
-    print("⚠️ You are running app.py directly. Use 'python main.py' instead to start the bot AND dashboard.")
+    print("⚠️ You are running app.py directly. Use 'python run_bot.py' instead.")
