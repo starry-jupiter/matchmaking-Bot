@@ -380,7 +380,6 @@ class SwipeView(discord.ui.View):
 # ---------------------------------------------------------
 # AUTOMATION COG (Handles Messages & Timers)
 # ---------------------------------------------------------
-@commands.Cog.listener()
 class MatchManager(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
