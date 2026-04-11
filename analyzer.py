@@ -17,6 +17,7 @@ def analyze_intro(user_intro):
     3. Map their "Looking For" preference to a list: ["man"], ["woman"], ["non-binary"], or multiple.
     4. Extract likes and dislikes as lists.
     5. Convert Timezone (like EST) to a GMT offset number (EST = -5).
+    When selecting compatible profiles prioritize matching gender and sexuality even if they have nothing in common.
     
     CRITICAL NORMALIZATION RULE:
     When extracting 'likes', 'dislikes', and any interests, you MUST normalize the terminology into broad, standard categories. Do not use the user's exact slang. 

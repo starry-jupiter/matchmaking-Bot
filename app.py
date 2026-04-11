@@ -174,7 +174,7 @@ class AppActionView(discord.ui.View):
         await interaction.response.edit_message(content=f"✅ **Accepted** by {interaction.user.mention}", view=self)
         try:
             applicant = await interaction.guild.fetch_member(user_id)
-            await applicant.send(f"🎉 Your staff application for **{interaction.guild.name}** was ACCEPTED!")
+            await applicant.send(f"🎉 Your staff application for **{interaction.guild.name}** was ACCEPTED! Congrats! Please wait for more info from the team.")
         except: pass
 
     @discord.ui.button(label='❌ Reject', style=discord.ButtonStyle.danger, custom_id='app_reject_btn')
@@ -184,7 +184,7 @@ class AppActionView(discord.ui.View):
         await interaction.response.edit_message(content=f"❌ **Rejected** by {interaction.user.mention}", view=self)
         try:
             applicant = await interaction.guild.fetch_member(user_id)
-            await applicant.send(f"⛔ Update: Your staff application for **{interaction.guild.name}** was declined.")
+            await applicant.send(f"⛔ Update: Your staff application for **{interaction.guild.name}** was declined. Thank you for applying!")
         except: pass
 
 class StaffAppModal(discord.ui.Modal, title='Staff Application'):
@@ -241,7 +241,7 @@ class CafeActionView(discord.ui.View):
             return await interaction.response.send_message("Only the matched users can vote!", ephemeral=True)
         await interaction.response.send_message(f"✅ {interaction.user.mention} voted to keep the cafe open!")
 
-    @discord.ui.button(label='💔 End Match & Close', style=discord.ButtonStyle.danger, custom_id='cafe_close_btn')
+    @discord.ui.button(label='💔 Close Cafe', style=discord.ButtonStyle.danger, custom_id='cafe_close_btn')
     async def close_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id not in [self.user1_id, self.user2_id]:
             return await interaction.response.send_message("Only the matched users can vote!", ephemeral=True)
@@ -498,7 +498,18 @@ async def add_wl(interaction: discord.Interaction, target: discord.User, note: s
     if wl_key not in watchlist_db: watchlist_db[wl_key] = {}
     watchlist_db[wl_key][target.id] = note
     await interaction.response.send_message(f"✅ Added {target.mention} to watchlist.", ephemeral=True)
-
+    
+@bot.tree.command(name="watchlist-remove", description="Staff: Remove a user from your watchlist")
+@app_commands.default_permissions(manage_messages=True)
+async def remove_wl(interaction: discord.Interaction, target: discord.User):
+    wl_key = f"{interaction.guild.id}_{interaction.user.id}"
+    
+    # Check if they have a watchlist and if the target is actually on it
+    if wl_key in watchlist_db and target.id in watchlist_db[wl_key]:
+        del watchlist_db[wl_key][target.id]
+        await interaction.response.send_message(f"✅ Removed {target.mention} from your watchlist.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"❌ {target.mention} is not currently on your watchlist.", ephemeral=True)
 @bot.tree.command(name="watchlist", description="Staff: View your watchlist")
 @app_commands.default_permissions(manage_messages=True)
 async def view_wl(interaction: discord.Interaction):
