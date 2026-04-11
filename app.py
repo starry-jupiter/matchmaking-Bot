@@ -393,7 +393,8 @@ class MatchManager(commands.Cog):
         config = database.get_config(message.guild.id)
         if not config or str(message.channel.category_id) != config.get("match_category_id"): return
         
-        if "➤" in message.content and "AGE" in message.content.upper():
+        # Check for standard "AGE" or the specific aesthetic "ᴀɢᴇ"
+        if "➤" in message.content and ("AGE" in message.content.upper() or "ᴀɢᴇ" in message.content):
             await message.add_reaction("⏳")
             parsed = analyzer.analyze_intro(message.content)
             
