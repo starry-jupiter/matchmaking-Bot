@@ -118,15 +118,13 @@ def get_strict_matches(user_id, guild_id):
         # Hard Filter: Do not show if a 'Like' hits a 'Dislike'
         if my_l.intersection(th_d) or th_l.intersection(my_d): 
             continue
-        
         # Priority: Must share at least one interest to show up
         shared = my_l.intersection(th_l)
-        if len(shared) >= 0:
+        if len(shared) >= 1:
             p['shared_interests'] = list(shared)
             matches.append(p)
             
     return matches
-
 def record_swipe(user_id, target_id, guild_id, liked):
     try:
         swipe_data = {"user_id": str(user_id), "target_id": str(target_id), "guild_id": str(guild_id), "liked": liked}
