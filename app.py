@@ -646,6 +646,49 @@ async def spawn_panel(interaction: discord.Interaction):
     await interaction.channel.send("🛠️ Community Tools", view=CommunityToolsView())
     await interaction.response.send_message("✅ Spawned.", ephemeral=True)
 
+@bot.tree.command(name="investigate", description="Staff: Run a background check on a user")
+@app_commands.default_permissions(manage_messages=True)
+async def investigate_user(interaction: discord.Interaction, target: discord.Member):
+    # Defer the response immediately since database checks might take a second
+    await interaction.response.defer(ephemeral=True)
+    
+    # 1. Check Discord Age
+    # This uses Discord's native formatting to show relative time (e.g., "2 days ago")
+    created_ts = int(target.created_at.timestamp())
+    account_age_str = f"<t:{created_ts}:d> (<t:{created_ts}:R>)"
+    
+    # 2. Check Watchlist Status
+    # Scan the entire server's watchlist memory to see if ANY staff member flagged them
+    watchlist_notes = []
+    for key, users in watchlist_db.items():
+        if key.startswith(str(interaction.guild.id)):
+            if target.id in users:
+                staff_id = key.split('_')[1]
+                watchlist_notes.append(f"🚩 Flagged by <@{staff_id}>: {users[target.id]}")
+    
+    wl_status = "\n".join(watchlist_notes) if watchlist_notes else "✅ Clear (Not on any watchlist)"
+    
+    # 3. Check Active Matches
+    pair_info = database.get_user_pairing(target.id, interaction.guild.id)
+    if pair_info:
+        partner_id = pair_info['user2_id'] if str(pair_info['user1_id']) == str(target.id) else pair_info['user1_id']
+        match_status = f"☕ Currently paired in a Cafe with <@{partner_id}>"
+    else:
+        match_status = "📭 No active matches."
+        
+    # Build a tech-chic, highly readable Embed
+    embed = discord.Embed(title=f"🔍 Investigation Report: {target.display_name}", color=discord.Color.purple())
+    embed.set_thumbnail(url=target.display_avatar.url)
+    
+    embed.add_field(name="📅 Account Created", value=account_age_str, inline=False)
+    embed.add_field(name="🛡️ Watchlist Status", value=wl_status, inline=False)
+    embed.add_field(name="☕ Active Matches", value=match_status, inline=False)
+    
+    embed.set_footer(text=f"User ID: {target.id} | Requested by {interaction.user.name}")
+    
+    # Send it privately to the staff member
+    await interaction.followup.send(embed=embed, ephemeral=True)
+    
 @bot.tree.command(name="help", description="List commands")
 async def help_cmd(interaction: discord.Interaction):
     embed = discord.Embed(title="🏹 Matchmaker Bot Commands", description="For more info please visit https://starry-jupiter.github.io/RedPandaBotSite/", color=discord.Color.purple())
