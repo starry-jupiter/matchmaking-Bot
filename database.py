@@ -121,7 +121,7 @@ def get_strict_matches(user_id, guild_id):
         
         # Priority: Must share at least one interest to show up
         shared = my_l.intersection(th_l)
-        if len(shared) >= 1:
+        if len(shared) >= 0:
             p['shared_interests'] = list(shared)
             matches.append(p)
             
