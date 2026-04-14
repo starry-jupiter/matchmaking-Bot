@@ -17,8 +17,10 @@ def analyze_intro(user_intro):
     3. Map their "Looking For" preference to a list: ["man"], ["woman"], ["non-binary"], or multiple.
     4. Extract likes and dislikes as lists.
     5. Convert Timezone (like EST) to a GMT offset number (EST = -5).
-    When selecting compatible profiles prioritize matching gender and sexuality even if they have nothing in common.
     
+    🚨 CRITICAL AGE RULE 🚨
+    Extract their CURRENT age as an integer. If they say "15 turning 16", "almost 18", or "17 but turning 18 soon", you MUST extract their CURRENT age (15, 17). Ignore the future age entirely!
+
     CRITICAL NORMALIZATION RULE:
     When extracting 'likes', 'dislikes', and any interests, you MUST normalize the terminology into broad, standard categories. Do not use the user's exact slang. 
     - "gaming", "ps5", "pc" -> "Video Games"

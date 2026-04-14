@@ -43,6 +43,7 @@ class MatchmakingBot(commands.Bot):
         self.add_view(CommunityToolsView()) 
         self.add_view(SupportTicketView())
         self.add_view(AppActionView())
+        self.add_view(MatchmakingPanelView())
         
         await self.tree.sync()
         print("Bot is online. Commands synced.")
@@ -340,33 +341,61 @@ class SwipeView(discord.ui.View):
         
         if is_match:
             database.create_pairing(self.uid, self.tid, self.gid)
-            await interaction.response.send_message("🎉 IT'S A MATCH! A private cafe is being set up for you both.", ephemeral=True)
+            
+            # --- THE AUTO-CLOSE TICKET FIX ---
+            await interaction.response.edit_message(content="🎉 **IT'S A MATCH!** Setting up your private cafe now. This dashboard will self-destruct in 5 seconds to keep the server clean!", embed=None, view=None)
             
             user1 = interaction.guild.get_member(int(self.uid)) or await interaction.guild.fetch_member(int(self.uid))
             user2 = interaction.guild.get_member(int(self.tid)) or await interaction.guild.fetch_member(int(self.tid))
             
             if user1 and user2:
                 asyncio.create_task(create_cafe_channel(interaction.guild, user1, user2))
+            
+            # Wait 5 seconds, then delete the ticket!
+            await asyncio.sleep(5)
+            try:
+                await interaction.channel.delete()
+            except:
+                pass
         else:
-            await interaction.response.send_message("✅ Liked! They have been notified.", ephemeral=True)
+            matches = database.get_strict_matches(self.uid, self.gid)
+            if not matches: 
+                return await interaction.response.edit_message(content="✅ **Liked!** They have been notified.\n\n📭 **No more matches right now.** Check back later!", embed=None, view=None)
+            
+            next_user = matches[0]
+            self.tid = next_user['user_id']
+            embed = discord.Embed(title=f"Match: {next_user.get('name')} ({next_user.get('age')})", description=f"**Intro:**\n{next_user.get('raw_intro')}", color=discord.Color.blue())
+            
+            # Send notification to target
             target_ticket = get_ticket_channel(interaction.guild, int(self.tid))
             if target_ticket:
                 swiper_profile = database.get_profile(self.uid, self.gid)
                 if swiper_profile:
-                    embed = discord.Embed(
+                    notify_embed = discord.Embed(
                         title=f"🔔 Someone is interested in you!",
                         description=f"**{swiper_profile.get('name')} ({swiper_profile.get('age')})** swiped right! Do you want to match back?\n\n**Intro:**\n{swiper_profile.get('raw_intro')}",
                         color=discord.Color.gold()
                     )
                     view = SwipeView(uid=self.tid, tid=self.uid, gid=self.gid)
-                    await target_ticket.send(content=f"Hey <@{self.tid}>, you have a new match request!", embed=embed, view=view)
-        
-        await self.show_next(interaction)
+                    await target_ticket.send(content=f"Hey <@{self.tid}>, you have a new match request!", embed=notify_embed, view=view)
+            
+            # --- THE BUTTON NOTIFICATION FIX ---
+            await interaction.response.edit_message(content="*✅ Liked! Loading next profile...*", embed=embed, view=self)
 
     @discord.ui.button(label='❌ Pass', style=discord.ButtonStyle.danger)
     async def deny(self, interaction, button):
         database.record_swipe(self.uid, self.tid, self.gid, False)
-        await self.show_next(interaction)
+        
+        matches = database.get_strict_matches(self.uid, self.gid)
+        if not matches: 
+            return await interaction.response.edit_message(content="*❌ Passed!*\n\n📭 **No more matches right now.** Check back later!", embed=None, view=None)
+        
+        next_user = matches[0]
+        self.tid = next_user['user_id']
+        embed = discord.Embed(title=f"Match: {next_user.get('name')} ({next_user.get('age')})", description=f"**Intro:**\n{next_user.get('raw_intro')}", color=discord.Color.blue())
+        
+        # --- THE BUTTON NOTIFICATION FIX ---
+        await interaction.response.edit_message(content="*❌ Passed! Loading next profile...*", embed=embed, view=self)
 
     @discord.ui.button(label='✅ Vouch', style=discord.ButtonStyle.secondary)
     async def vouch(self, interaction, button):
@@ -645,6 +674,59 @@ async def time_left(interaction: discord.Interaction):
 async def spawn_panel(interaction: discord.Interaction):
     await interaction.channel.send("🛠️ Community Tools", view=CommunityToolsView())
     await interaction.response.send_message("✅ Spawned.", ephemeral=True)
+
+@bot.tree.command(name="spawn-match-panel", description="Admin: Drop the matchmaking entry button")
+@app_commands.default_permissions(administrator=True)
+async def spawn_match_panel(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="💖 Matchmaking Lobby", 
+        description="Click the button below to open your private dashboard, submit your intro, and start swiping!",
+        color=discord.Color.purple()
+    )
+    await interaction.channel.send(embed=embed, view=MatchmakingPanelView())
+    await interaction.response.send_message("✅ Match panel spawned.", ephemeral=True)
+
+class MatchmakingPanelView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        
+    @discord.ui.button(label='💖 Open Matchmaking Dashboard', style=discord.ButtonStyle.success, custom_id='btn_open_match_ticket')
+    async def open_ticket_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        
+        # 0. Check Watchlist for Ticket Bans
+        guild_id = str(interaction.guild.id)
+        if guild_id in watchlist_db and interaction.user.id in watchlist_db[guild_id]:
+            if watchlist_db[guild_id][interaction.user.id].get("ticket_ban"):
+                return await interaction.followup.send("🛑 **Action Denied:** You have been restricted from opening matchmaking tickets by the moderation team.", ephemeral=True)
+        
+        active_pair = database.get_user_pairing(interaction.user.id, interaction.guild.id)
+        if active_pair:
+            return await interaction.followup.send(
+                "🛑 **Action Denied:** You are already in an active match! "
+                "You must unpair before you can start a new matchmaking journey.", 
+                ephemeral=True
+            )
+
+        existing_ticket = get_ticket_channel(interaction.guild, interaction.user.id)
+        if existing_ticket:
+            return await interaction.followup.send(f"⚠️ You already have an open ticket: {existing_ticket.mention}", ephemeral=True)
+
+        config = database.get_config(interaction.guild.id)
+        if not config or not config.get("match_category_id"):
+            return await interaction.followup.send("❌ Matchmaking is not set up on this server.", ephemeral=True)
+
+        cat = interaction.guild.get_channel(int(config["match_category_id"]))
+        if not cat:
+            return await interaction.followup.send("❌ Matchmaking category not found.", ephemeral=True)
+
+        ticket = await cat.create_text_channel(name=f"ticket-{interaction.user.name}")
+        
+        await ticket.set_permissions(interaction.user, read_messages=True, send_messages=True)
+        await ticket.set_permissions(interaction.guild.default_role, read_messages=False)
+
+        await ticket.send(f"Welcome {interaction.user.mention}!", view=TicketDashboardView())
+        await interaction.followup.send(f"✅ Created: {ticket.mention}", ephemeral=True)
 
 @bot.tree.command(name="investigate", description="Staff: Run a background check on a user")
 @app_commands.default_permissions(manage_messages=True)
