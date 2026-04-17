@@ -1,10 +1,3 @@
-Here is your complete, fully cleaned, and finalized **`app.py`** file! 
-
-I have gone through and removed all the duplicate code blocks, fixed the `target_id` swiping bug, implemented the side-by-side buttons on the new instructions panel, and ensured the AI override logic is perfectly integrated. 
-
-You can completely delete everything in your current `app.py` and replace it entirely with this code:
-
-```python
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -187,22 +180,18 @@ class MatchmakingPanelView(discord.ui.View):
     async def request_unpair_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
         
-        # Fetch the active pairing from the database
         pair_info = database.get_user_pairing(interaction.user.id, interaction.guild.id)
         if not pair_info: 
             return await interaction.followup.send("❌ You don't have an active match right now!", ephemeral=True)
             
-        # Determine who the partner is
         partner_id = pair_info.get('user2_id') if str(pair_info.get('user1_id')) == str(interaction.user.id) else pair_info.get('user1_id')
         
-        # Calculate the exact time the pair was made
         try:
             dt = datetime.fromisoformat(pair_info.get('start_time').replace('Z', '+00:00'))
             unix_time = int(dt.timestamp())
         except: 
             unix_time = int(time.time())
         
-        # Fetch category config to organize the ticket cleanly
         config = database.get_config(interaction.guild.id)
         ticket_category_id = config.get("ticket_category_id") if config else None
         category = interaction.guild.get_channel(int(ticket_category_id)) if ticket_category_id else None
@@ -219,24 +208,20 @@ class MatchmakingPanelView(discord.ui.View):
             overwrites=overwrites
         )
         
-        # Build the cozy, clear embed with the pairing details
         embed = discord.Embed(
             title="💔 Unpair Request", 
             description=(
                 "Hi there! Sometimes connections just don't work out, and that's perfectly okay. 🌱\n\n"
                 "Please leave a brief message letting us know why you'd like to end the match. A staff member will be here shortly to close your cafe safely."
             ), 
-            color=discord.Color.from_rgb(255, 182, 193) # Soft pastel pink
+            color=discord.Color.from_rgb(255, 182, 193) 
         )
-        
-        # Display the specific pairing information requested
         embed.add_field(name="👤 Requesting User", value=interaction.user.mention, inline=True)
         embed.add_field(name="💞 Current Partner", value=f"<@{partner_id}>", inline=True)
         embed.add_field(name="⏱️ Paired For", value=f"<t:{unix_time}:R> (Since <t:{unix_time}:f>)", inline=False)
         
         await ticket_channel.send(content=f"Welcome {interaction.user.mention}, staff will review your request shortly.", embed=embed, view=SupportTicketView())
         await interaction.followup.send(f"✅ Your unpair request ticket has been created! Please go to {ticket_channel.mention}", ephemeral=True)
-
 
 class StaffApprovalView(discord.ui.View):
     def __init__(self, user_id, parsed_data, raw_intro, ticket_channel_id):
@@ -493,10 +478,8 @@ class SwipeView(discord.ui.View):
 
     @discord.ui.button(label='❌ Pass', style=discord.ButtonStyle.danger)
     async def deny(self, interaction, button):
-        # Record the left swipe
         database.record_swipe(self.uid, self.tid, self.gid, False)
         
-        # Check for new matches
         matches = database.get_strict_matches(self.uid, self.gid)
         
         if not matches: 
@@ -523,11 +506,11 @@ class SwipeView(discord.ui.View):
         
         # 3. Send the NEXT profile as a brand NEW message
         await interaction.channel.send(embed=embed, view=self)
-
+        
     @discord.ui.button(label='✅ Vouch', style=discord.ButtonStyle.secondary)
     async def vouch(self, interaction, button):
         database.add_vouch(self.tid, self.gid)
-        await interaction.response.send_message(f"✅ You gave a green flag to this profile! 🐾", ephemeral=True)
+        await interaction.response.send_message(f"✅ You gave a green flag to this profile!", ephemeral=True)
 
     @discord.ui.button(label='🚩 Report', style=discord.ButtonStyle.secondary)
     async def report(self, interaction, button):
@@ -735,7 +718,6 @@ async def open_ticket(interaction: discord.Interaction):
     await ticket.set_permissions(interaction.user, read_messages=True, send_messages=True)
     await ticket.set_permissions(interaction.guild.default_role, read_messages=False)
 
-    # Cohesive, friendly instruction embed
     intro_channel_mention = "<#123456789012345678>" 
     
     embed = discord.Embed(
@@ -749,7 +731,7 @@ async def open_ticket(interaction: discord.Interaction):
             "**💔 Want to end a match later?**\n"
             "If you ever need to close your cafe and end a match, just return to the main instructions channel and click the **💔 Request Unpair** button."
         ),
-        color=discord.Color.from_rgb(180, 230, 180) # Soft, pastel sage green 🌿
+        color=discord.Color.from_rgb(180, 230, 180) 
     )
     embed.set_footer(text="Have fun and happy matching! 🌸")
 
@@ -844,7 +826,7 @@ async def spawn_instructions_panel(interaction: discord.Interaction):
             "**💔 Need to end a match?**\n"
             "Not feeling it? No worries at all! Just click the **💔 Request Unpair** button below, and our team will quietly and safely close the cafe for you."
         ),
-        color=discord.Color.from_rgb(255, 182, 193) # Soft pastel pink 🌸
+        color=discord.Color.from_rgb(255, 182, 193) 
     )
     
     embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/8208/8208226.png") 
@@ -856,16 +838,10 @@ async def spawn_instructions_panel(interaction: discord.Interaction):
 @bot.tree.command(name="investigate", description="Staff: Run a background check on a user")
 @app_commands.default_permissions(manage_messages=True)
 async def investigate_user(interaction: discord.Interaction, target: discord.Member):
-    # Defer the response immediately since database checks might take a second
     await interaction.response.defer(ephemeral=True)
-    
-    # 1. Check Discord Age
-    # This uses Discord's native formatting to show relative time (e.g., "2 days ago")
     created_ts = int(target.created_at.timestamp())
     account_age_str = f"<t:{created_ts}:d> (<t:{created_ts}:R>)"
     
-    # 2. Check Watchlist Status
-    # Scan the entire server's watchlist memory to see if ANY staff member flagged them
     watchlist_notes = []
     for key, users in watchlist_db.items():
         if key.startswith(str(interaction.guild.id)):
@@ -875,7 +851,6 @@ async def investigate_user(interaction: discord.Interaction, target: discord.Mem
     
     wl_status = "\n".join(watchlist_notes) if watchlist_notes else "✅ Clear (Not on any watchlist)"
     
-    # 3. Check Active Matches
     pair_info = database.get_user_pairing(target.id, interaction.guild.id)
     if pair_info:
         partner_id = pair_info['user2_id'] if str(pair_info['user1_id']) == str(target.id) else pair_info['user1_id']
@@ -883,7 +858,6 @@ async def investigate_user(interaction: discord.Interaction, target: discord.Mem
     else:
         match_status = "📭 No active matches."
         
-    # Build a tech-chic, highly readable Embed
     embed = discord.Embed(title=f"🔍 Investigation Report: {target.display_name}", color=discord.Color.purple())
     embed.set_thumbnail(url=target.display_avatar.url)
     
@@ -892,8 +866,6 @@ async def investigate_user(interaction: discord.Interaction, target: discord.Mem
     embed.add_field(name="☕ Active Matches", value=match_status, inline=False)
     
     embed.set_footer(text=f"User ID: {target.id} | Requested by {interaction.user.name}")
-    
-    # Send it privately to the staff member
     await interaction.followup.send(embed=embed, ephemeral=True)
     
 @bot.tree.command(name="help", description="List commands")
@@ -930,7 +902,7 @@ async def request_unpair_ticket_cmd(interaction: discord.Interaction):
     
     pair_info = database.get_user_pairing(interaction.user.id, interaction.guild.id)
     if not pair_info: 
-        return await interaction.followup.send("❌ You don't have an active match to unpair from!", ephemeral=True)
+        return await interaction.followup.send("❌ You don't have an active match right now!", ephemeral=True)
         
     partner_id = pair_info.get('user2_id') if str(pair_info.get('user1_id')) == str(interaction.user.id) else pair_info.get('user1_id')
     
@@ -962,8 +934,9 @@ async def request_unpair_ticket_cmd(interaction: discord.Interaction):
             "Hi there! Sometimes connections just don't work out, and that's perfectly okay. 🌱\n\n"
             "Please leave a brief message letting us know why you'd like to end the match. A staff member will be here shortly to close your cafe safely."
         ), 
-        color=discord.Color.from_rgb(255, 182, 193)
+        color=discord.Color.from_rgb(255, 182, 193) 
     )
+    
     embed.add_field(name="👤 Requesting User", value=interaction.user.mention, inline=True)
     embed.add_field(name="💞 Current Partner", value=f"<@{partner_id}>", inline=True)
     embed.add_field(name="⏱️ Paired For", value=f"<t:{unix_time}:R> (Since <t:{unix_time}:f>)", inline=False)
@@ -977,23 +950,18 @@ async def override_flag(interaction: discord.Interaction, target: discord.Member
     guild_id = str(interaction.guild.id)
     if guild_id not in watchlist_db: watchlist_db[guild_id] = {}
     
-    # Remove the ticket ban and add a special 'whitelisted' flag
     watchlist_db[guild_id][target.id] = {
         "note": "Staff Whitelisted (AI Override)", 
         "ticket_ban": False, 
         "whitelisted": True
     }
     
-    # Try to find their flagged ticket automatically
     channel_name = f"flagged-{target.name.lower()}"
     ticket_channel = discord.utils.get(interaction.guild.text_channels, name=channel_name)
     
     if ticket_channel:
-        # Revert the name back to a standard ticket
         await ticket_channel.edit(name=f"ticket-{target.name.lower()}")
-        # Ensure they have permission to type again
         await ticket_channel.set_permissions(target, send_messages=True, read_messages=True)
-        # Send a cute, friendly notification inside their ticket
         await ticket_channel.send(f"✨ **Good news!** {target.mention}, a staff member has cleared your flag. You can now send your intro again and the AI will let it through! 🍃")
         
     await interaction.response.send_message(f"✅ AI flag successfully overridden for {target.mention}. They are now whitelisted and their ticket has been restored! 🐾", ephemeral=True)
@@ -1008,4 +976,3 @@ async def on_ready():
 
 if __name__ == "__main__":
     print("⚠️ You are running app.py directly. Use 'python run_bot.py' instead.")
-```
