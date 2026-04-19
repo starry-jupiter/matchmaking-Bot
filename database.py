@@ -77,6 +77,47 @@ def get_strict_matches(user_id, guild_id):
     me = me_res.data[0]
     my_age = int(me['age'])
     
+    # --- FIX 1: Fetch swiped history to prevent repeats ---
+    swipes_res = supabase.table("swipes").select("target_id").eq("user_id", str(user_id)).eq("guild_id", str(guild_id)).execute()
+    swiped_ids = set(str(s['target_id']) for s in swipes_res.data) if swipes_res.data else set()
+    
+    # 2. Fetch all other profiles in the server
+    others = supabase.table("profiles").select("*").eq("guild_id", str(guild_id)).neq("user_id", str(user_id)).execute().data
+    
+    matches = []
+    for p in others:
+        # --- FIX 2: Skip profiles you have already swiped on ---
+        if str(p['user_id']) in swiped_ids:
+            continue
+
+        their_age = int(p['age'])
+        
+        # --- AGE GAP LOGIC (Kept for safety) ---
+        allowed = False
+        if my_age == 13:
+            if their_age in [13, 14]: allowed = True
+        elif 14 <= my_age <= 17:
+            if abs(my_age - their_age) <= 2: allowed = True
+        elif my_age == 18:
+            if their_age >= 16: allowed = True
+        elif my_age >= 19:
+            if their_age >= 19 and abs(my_age - their_age) <= 5: allowed = True
+
+        if not allowed: continue
+        
+        # --- GENDER & ATTRACTION CHECK (Kept for compatibility) ---
+        they_like_me = "any" in p['attracted_to'] or me['gender'] in p['attracted_to']
+        i_like_them = "any" in me['attracted_to'] or p['gender'] in me['attracted_to']
+
+        if not (they_like_me and i_like_them):
+            continue
+
+        # --- FIX 3: Removed all Likes, Dislikes, and Interest filters ---
+        # Profiles are now added as long as they pass Age and Gender checks
+        matches.append(p)
+            
+    return matches
+    
     # 2. Fetch all other profiles in the server
     others = supabase.table("profiles").select("*").eq("guild_id", str(guild_id)).neq("user_id", str(user_id)).execute().data
     
