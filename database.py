@@ -71,13 +71,13 @@ def add_vouch(user_id, guild_id):
     except Exception as e: return False
 
 def get_strict_matches(user_id, guild_id):
-    # 1. Fetch the swiper's profile
+    # 1. Fetch your profile
     me_res = supabase.table("profiles").select("*").eq("user_id", str(user_id)).eq("guild_id", str(guild_id)).execute()
     if not me_res.data: return []
     me = me_res.data[0]
     my_age = int(me['age'])
     
-    # --- FIX 1: Fetch swiped history to prevent repeats ---
+    # --- NEW: Fetch swipe history to prevent repeats ---
     swipes_res = supabase.table("swipes").select("target_id").eq("user_id", str(user_id)).eq("guild_id", str(guild_id)).execute()
     swiped_ids = set(str(s['target_id']) for s in swipes_res.data) if swipes_res.data else set()
     
@@ -86,13 +86,13 @@ def get_strict_matches(user_id, guild_id):
     
     matches = []
     for p in others:
-        # --- FIX 2: Skip profiles you have already swiped on ---
+        # SKIP if you've already swiped on them (Fixes the repeating issue)
         if str(p['user_id']) in swiped_ids:
             continue
 
         their_age = int(p['age'])
         
-        # --- AGE GAP LOGIC (Kept for safety) ---
+        # --- AGE GAP LOGIC (Kept for Safety) ---
         allowed = False
         if my_age == 13:
             if their_age in [13, 14]: allowed = True
@@ -100,70 +100,24 @@ def get_strict_matches(user_id, guild_id):
             if abs(my_age - their_age) <= 2: allowed = True
         elif my_age == 18:
             if their_age >= 16: allowed = True
-        elif my_age >= 19:
-            if their_age >= 19 and abs(my_age - their_age) <= 5: allowed = True
-
-        if not allowed: continue
-        
-        # --- GENDER & ATTRACTION CHECK (Kept for compatibility) ---
-        they_like_me = "any" in p['attracted_to'] or me['gender'] in p['attracted_to']
-        i_like_them = "any" in me['attracted_to'] or p['gender'] in me['attracted_to']
-
-        if not (they_like_me and i_like_them):
-            continue
-
-        # --- FIX 3: Removed all Likes, Dislikes, and Interest filters ---
-        # Profiles are now added as long as they pass Age and Gender checks
-        matches.append(p)
-            
-    return matches
-    
-    # 2. Fetch all other profiles in the server
-    others = supabase.table("profiles").select("*").eq("guild_id", str(guild_id)).neq("user_id", str(user_id)).execute().data
-    
-    matches = []
-    for p in others:
-        their_age = int(p['age'])
-        
-        # --- NEW STRICT AGE GAP LOGIC ---
-        allowed = False
-        
-        # Rule: 13 year olds can only see 13 and 14
-        if my_age == 13:
-            if their_age in [13, 14]: allowed = True
-            
-        # Rule: 14-17 year olds can see 2 years up or down
-        elif 14 <= my_age <= 17:
-            if abs(my_age - their_age) <= 2: allowed = True
-            
-        # Rule: 18 year olds can see 16+ (anyone over)
-        elif my_age == 18:
-            if their_age >= 16: allowed = True
-            
-        # Rule: 19+ has a 5 year limit (19+ anyone over but within 5 years)
         elif my_age >= 19:
             if their_age >= 19 and abs(my_age - their_age) <= 5: allowed = True
 
         if not allowed: continue
         
         # --- GENDER & ATTRACTION CHECK ---
-        if me['gender'] not in p['attracted_to'] or p['gender'] not in me['attracted_to']: 
+        # Using flexible "any" logic for better matching
+        they_like_me = "any" in p['attracted_to'] or me['gender'] in p['attracted_to']
+        i_like_them = "any" in me['attracted_to'] or p['gender'] in me['attracted_to']
+
+        if not (they_like_me and i_like_them):
             continue
 
-        # --- LIKES/DISLIKES FILTER ---
-        my_l = set(x.lower() for x in (me.get('likes') or []))
-        my_d = set(x.lower() for x in (me.get('dislikes') or []))
-        th_l = set(x.lower() for x in (p.get('likes') or []))
-        th_d = set(x.lower() for x in (p.get('dislikes') or []))
-
-        # Hard Filter: Do not show if a 'Like' hits a 'Dislike'
-        if my_l.intersection(th_d) or th_l.intersection(my_d): 
-            continue
-        # Priority: Must share at least one interest to show up
-        shared = my_l.intersection(th_l)
-        if len(shared) >= 1:
-            p['shared_interests'] = list(shared)
-            matches.append(p)
+        # --- ALL OTHER FILTERS REMOVED ---
+        # No more shared interest requirement, no like/dislike clashing, and no timezone filtering.
+        matches.append(p)
+            
+    return matches
             
     return matches
 def record_swipe(user_id, target_id, guild_id, liked):
