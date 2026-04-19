@@ -77,14 +77,22 @@ def get_strict_matches(user_id, guild_id):
     me = me_res.data[0]
     my_age = int(me['age'])
     
+    # --- FIX: Fetch everyone this user has ALREADY swiped on ---
+    swipes_res = supabase.table("swipes").select("target_id").eq("user_id", str(user_id)).eq("guild_id", str(guild_id)).execute()
+    swiped_ids = set(str(s['target_id']) for s in swipes_res.data) if swipes_res.data else set()
+    
     # 2. Fetch all other profiles in the server
     others = supabase.table("profiles").select("*").eq("guild_id", str(guild_id)).neq("user_id", str(user_id)).execute().data
     
     matches = []
     for p in others:
+        # --- FIX: Skip this profile if it's already in the swipe history ---
+        if str(p['user_id']) in swiped_ids:
+            continue
+
         their_age = int(p['age'])
         
-        # --- NEW STRICT AGE GAP LOGIC ---
+        # --- STRICT AGE GAP LOGIC ---
         allowed = False
         
         # Rule: 13 year olds can only see 13 and 14
@@ -118,6 +126,7 @@ def get_strict_matches(user_id, guild_id):
         # Hard Filter: Do not show if a 'Like' hits a 'Dislike'
         if my_l.intersection(th_d) or th_l.intersection(my_d): 
             continue
+            
         # Priority: Must share at least one interest to show up
         shared = my_l.intersection(th_l)
         if len(shared) >= 1:
@@ -125,6 +134,15 @@ def get_strict_matches(user_id, guild_id):
             matches.append(p)
             
     return matches
+def delete_all_user_swipes(user_id, guild_id):
+    try:
+        # Deletes every swipe this user has made in this server
+        supabase.table("swipes").delete().eq("user_id", str(user_id)).eq("guild_id", str(guild_id)).execute()
+        return True
+    except Exception as e: 
+        print(f"Error deleting swipes: {e}")
+        return False
+    
 def record_swipe(user_id, target_id, guild_id, liked):
     try:
         swipe_data = {"user_id": str(user_id), "target_id": str(target_id), "guild_id": str(guild_id), "liked": liked}
